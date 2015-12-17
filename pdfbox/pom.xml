@@ -21,7 +21,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.apache.pdfbox</groupId>
+        <groupId>org.allenai.pdfbox</groupId>
         <artifactId>pdfbox-parent</artifactId>
         <version>2.0.0-RC2</version>
         <relativePath>../parent/pom.xml</relativePath>
@@ -42,7 +42,7 @@
     
     <dependencies>
         <dependency>
-            <groupId>org.apache.pdfbox</groupId>
+            <groupId>org.allenai.pdfbox</groupId>
             <artifactId>fontbox</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -114,7 +114,7 @@
                 <configuration>
                     <argLine>-Xmx768m</argLine>
                     <excludes>
-                        <exclude>org/apache/pdfbox/rendering/TestPDFToImage.java</exclude>
+                        <exclude>org/allenai/pdfbox/rendering/TestPDFToImage.java</exclude>
                     </excludes>
                     <systemPropertyVariables>
                         <java.util.logging.config.file>src/test/resources/logging.properties</java.util.logging.config.file>
@@ -130,7 +130,7 @@
                         <Include-Resource>
                             {maven-resources},
                             META-INF=target/maven-shared-archive-resources/META-INF,
-                            org/apache/pdfbox/resources=target/classes/org/apache/pdfbox/resources
+                            org/allenai/pdfbox/resources=target/classes/org/allenai/pdfbox/resources
                         </Include-Resource>
                     </instructions>
                 </configuration>
@@ -140,19 +140,19 @@
                 <artifactId>apache-rat-plugin</artifactId>
                 <configuration>
                     <excludes>
-                        <exclude>src/main/resources/org/apache/pdfbox/resources/afm/*</exclude>
-                        <exclude>src/main/resources/org/apache/pdfbox/resources/icc/*</exclude>
-                        <exclude>src/main/resources/org/apache/pdfbox/resources/glyphlist/glyphlist.txt</exclude>
-                        <exclude>src/main/resources/org/apache/pdfbox/resources/glyphlist/zapfdingbats.txt</exclude>
-                        <exclude>src/main/resources/org/apache/pdfbox/resources/text/BidiMirroring.txt</exclude>
+                        <exclude>src/main/resources/org/allenai/pdfbox/resources/afm/*</exclude>
+                        <exclude>src/main/resources/org/allenai/pdfbox/resources/icc/*</exclude>
+                        <exclude>src/main/resources/org/allenai/pdfbox/resources/glyphlist/glyphlist.txt</exclude>
+                        <exclude>src/main/resources/org/allenai/pdfbox/resources/glyphlist/zapfdingbats.txt</exclude>
+                        <exclude>src/main/resources/org/allenai/pdfbox/resources/text/BidiMirroring.txt</exclude>
                         <exclude>src/main/resources/META-INF/services/*</exclude>
                         <exclude>src/test/resources/input/rendering/*.ai</exclude>
                         <exclude>src/test/resources/input/*.txt</exclude>
                         <exclude>src/test/resources/output/*</exclude>
                         <exclude>release.properties</exclude>
-                        <exclude>src/test/resources/org/apache/pdfbox/encryption/*.der</exclude>
-                        <exclude>src/test/resources/org/apache/pdfbox/encryption/*.pfx</exclude>
-                        <exclude>src/test/resources/org/apache/pdfbox/filter/*.bin</exclude>
+                        <exclude>src/test/resources/org/allenai/pdfbox/encryption/*.der</exclude>
+                        <exclude>src/test/resources/org/allenai/pdfbox/encryption/*.pfx</exclude>
+                        <exclude>src/test/resources/org/allenai/pdfbox/filter/*.bin</exclude>
                     </excludes>
                 </configuration>
             </plugin>
