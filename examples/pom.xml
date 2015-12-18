@@ -21,9 +21,9 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>org.apache.pdfbox</groupId>
+    <groupId>org.allenai.pdfbox</groupId>
     <artifactId>pdfbox-parent</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.0.0-RC2</version>
     <relativePath>../parent/pom.xml</relativePath>
   </parent>
 
@@ -77,7 +77,7 @@
     <dependency>
       <groupId>org.apache.ant</groupId>
       <artifactId>ant</artifactId>
-      <version>1.9.3</version>
+      <version>1.9.6</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
@@ -105,7 +105,7 @@
         <artifactId>apache-rat-plugin</artifactId>
         <configuration>
           <excludes>
-            <exclude>src/test/resources/org/apache/pdfbox/examples/signature/*</exclude>
+            <exclude>src/test/resources/org/allenai/pdfbox/examples/signature/*</exclude>
           </excludes>
         </configuration>
       </plugin>

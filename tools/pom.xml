@@ -21,9 +21,9 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>org.apache.pdfbox</groupId>
+    <groupId>org.allenai.pdfbox</groupId>
     <artifactId>pdfbox-parent</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.0.0-RC2</version>
     <relativePath>../parent/pom.xml</relativePath>
   </parent>
 
@@ -45,7 +45,7 @@
     </dependency>
     <dependency>
         <groupId>${project.groupId}</groupId>
-        <artifactId>pdfbox</artifactId>
+        <artifactId>pdfbox-debugger</artifactId>
         <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -62,8 +62,13 @@
         <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>net.java.dev.jai-imageio</groupId>
-        <artifactId>jai-imageio-core-standalone</artifactId>
+        <groupId>com.github.jai-imageio</groupId>
+        <artifactId>jai-imageio-core</artifactId>
+        <scope>test</scope>
+    </dependency>    
+    <dependency>
+        <groupId>com.github.jai-imageio</groupId>
+        <artifactId>jai-imageio-jpeg2000</artifactId>
         <scope>test</scope>
     </dependency>
   </dependencies>
