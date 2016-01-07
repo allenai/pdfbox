@@ -40,11 +40,6 @@
         <url>http://pdfbox.apache.org</url>
     </organization>
   
-    <issueManagement>
-        <system>jira</system>
-        <url>https://issues.apache.org/jira/browse/PDFBOX</url>
-    </issueManagement>
-
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
