@@ -86,16 +86,6 @@
 				<extensions>true</extensions>
 			</plugin>
 			<plugin>
-				<groupId>org.apache.rat</groupId>
-				<artifactId>apache-rat-plugin</artifactId>
-				<configuration>
-					<excludes>
-						<exclude>src/main/resources/project.version</exclude>
-						<exclude>release.properties</exclude>
-					</excludes>
-				</configuration>
-			</plugin>
-			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-checkstyle-plugin</artifactId>
 				<configuration>

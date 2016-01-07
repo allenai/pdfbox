@@ -131,27 +131,6 @@
                     </instructions>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.apache.rat</groupId>
-                <artifactId>apache-rat-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/afm/*</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/icc/*</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/glyphlist/glyphlist.txt</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/glyphlist/zapfdingbats.txt</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/text/BidiMirroring.txt</exclude>
-                        <exclude>src/main/resources/META-INF/services/*</exclude>
-                        <exclude>src/test/resources/input/rendering/*.ai</exclude>
-                        <exclude>src/test/resources/input/*.txt</exclude>
-                        <exclude>src/test/resources/output/*</exclude>
-                        <exclude>release.properties</exclude>
-                        <exclude>src/test/resources/org/allenai/pdfbox/encryption/*.der</exclude>
-                        <exclude>src/test/resources/org/allenai/pdfbox/encryption/*.pfx</exclude>
-                        <exclude>src/test/resources/org/allenai/pdfbox/filter/*.bin</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
 
