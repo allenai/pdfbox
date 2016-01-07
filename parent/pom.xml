@@ -372,8 +372,9 @@
     </developers>
 
   <scm>
-    <connection>scm:svn:http://svn.apache.org/repos/asf/maven/pom/tags/2.0.0-RC2/pdfbox-parent</connection>
-    <developerConnection>scm:svn:https://svn.apache.org/repos/asf/maven/pom/tags/2.0.0-RC2/pdfbox-parent</developerConnection>
-    <url>http://svn.apache.org/viewvc/maven/pom/tags/2.0.0-RC2/pdfbox-parent</url>
+    <connection>scm:git:https://github.com/allenai/pdfbox.git</connection>
+    <developerConnection>scm:git:git@github.com:allenai/pdfbox.git</developerConnection>
+    <url>https://github.com/allenai/pdfbox</url>
+    <tag>HEAD</tag>
   </scm>
 </project>
