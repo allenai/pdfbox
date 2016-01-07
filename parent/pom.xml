@@ -159,7 +159,7 @@
                 <configuration>
                     <useReleaseProfile>false</useReleaseProfile>
                     <goals>deploy</goals>
-                    <arguments>-Papache-release</arguments>
+                    <arguments>-Prelease</arguments>
                     <autoVersionSubmodules>true</autoVersionSubmodules>
                 </configuration>
             </plugin>
