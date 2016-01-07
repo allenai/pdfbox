@@ -155,5 +155,12 @@
         </plugins>
     </build>
 
+    <distributionManagement>
+      <repository>
+        <id>bintray-allenai-maven</id>
+        <url>https://api.bintray.com/maven/allenai/maven/org.allenai.pdfbox:pdfbox</url>
+      </repository>
+    </distributionManagement>
+
 </project>
 
