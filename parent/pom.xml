@@ -356,4 +356,12 @@
     <url>https://github.com/allenai/pdfbox</url>
     <tag>HEAD</tag>
   </scm>
+
+    <distributionManagement>
+      <repository>
+        <id>bintray-allenai-maven</id>
+        <url>https://api.bintray.com/maven/allenai/maven/${project.groupId}:${project.artifactId}</url>
+      </repository>
+    </distributionManagement>
+
 </project>
