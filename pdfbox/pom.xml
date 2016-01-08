@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.allenai.pdfbox</groupId>
         <artifactId>pdfbox-parent</artifactId>
-        <version>2.0.0-RC2</version>
+        <version>2.0.0-AI3-SNAPSHOT</version>
         <relativePath>../parent/pom.xml</relativePath>
     </parent>
 
@@ -35,10 +35,6 @@
         The Apache PDFBox library is an open source Java tool for working with PDF documents.
     </description>
     <inceptionYear>2002</inceptionYear>
-    
-    <properties>
-    	<git.scmJavadocUrl>git:https://git-wip-us.apache.org/repos/asf/pdfbox-docs//content/docs/${project.version}/javadocs</git.scmJavadocUrl>
-    </properties>
     
     <dependencies>
         <dependency>
@@ -135,45 +131,15 @@
                     </instructions>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.apache.rat</groupId>
-                <artifactId>apache-rat-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/afm/*</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/icc/*</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/glyphlist/glyphlist.txt</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/glyphlist/zapfdingbats.txt</exclude>
-                        <exclude>src/main/resources/org/allenai/pdfbox/resources/text/BidiMirroring.txt</exclude>
-                        <exclude>src/main/resources/META-INF/services/*</exclude>
-                        <exclude>src/test/resources/input/rendering/*.ai</exclude>
-                        <exclude>src/test/resources/input/*.txt</exclude>
-                        <exclude>src/test/resources/output/*</exclude>
-                        <exclude>release.properties</exclude>
-                        <exclude>src/test/resources/org/allenai/pdfbox/encryption/*.der</exclude>
-                        <exclude>src/test/resources/org/allenai/pdfbox/encryption/*.pfx</exclude>
-                        <exclude>src/test/resources/org/allenai/pdfbox/filter/*.bin</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-            <!-- 
-            	Publish Javadoc to Apache CMS
-            	After completion log in to https://cms.apache.org/pdfbox/publish 
-            	and click on the Submit button to commit to production.
-             -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-scm-publish-plugin</artifactId>
-                <configuration>
-                    <content>${project.reporting.outputDirectory}/apidocs</content>
-                    <pubScmUrl>scm:${git.scmJavadocUrl}</pubScmUrl>
-                    <tryUpdate>true</tryUpdate>
-                    <checkoutDirectory>${svn.scmJavadocCheckoutDirectory}</checkoutDirectory>
-                    <serverId>pdfbox-site</serverId>
-                </configuration>
-            </plugin>
         </plugins>
     </build>
+
+    <distributionManagement>
+      <repository>
+        <id>bintray-allenai-maven</id>
+        <url>https://api.bintray.com/maven/allenai/maven/org.allenai.pdfbox:pdfbox</url>
+      </repository>
+    </distributionManagement>
 
 </project>
 
