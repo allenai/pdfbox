@@ -21,7 +21,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.allenai.pdfbox</groupId>
+        <groupId>org.apache.pdfbox</groupId>
         <artifactId>pdfbox-parent</artifactId>
         <version>2.0.0-AI3-SNAPSHOT</version>
         <relativePath>../parent/pom.xml</relativePath>
@@ -38,7 +38,7 @@
     
     <dependencies>
         <dependency>
-            <groupId>org.allenai.pdfbox</groupId>
+            <groupId>org.apache.pdfbox</groupId>
             <artifactId>fontbox</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -110,7 +110,7 @@
                 <configuration>
                     <argLine>-Xmx768m</argLine>
                     <excludes>
-                        <exclude>org/allenai/pdfbox/rendering/TestPDFToImage.java</exclude>
+                        <exclude>org/apache/pdfbox/rendering/TestPDFToImage.java</exclude>
                     </excludes>
                     <systemPropertyVariables>
                         <java.util.logging.config.file>src/test/resources/logging.properties</java.util.logging.config.file>
@@ -126,20 +126,22 @@
                         <Include-Resource>
                             {maven-resources},
                             META-INF=target/maven-shared-archive-resources/META-INF,
-                            org/allenai/pdfbox/resources=target/classes/org/allenai/pdfbox/resources
+                            org/apache/pdfbox/resources=target/classes/org/apache/pdfbox/resources
                         </Include-Resource>
                     </instructions>
                 </configuration>
             </plugin>
-        </plugins>
-    </build>
-
-    <distributionManagement>
-      <repository>
-        <id>bintray-allenai-maven</id>
-        <url>https://api.bintray.com/maven/allenai/maven/org.allenai.pdfbox:pdfbox</url>
-      </repository>
-    </distributionManagement>
+            </plugins>
+   
+   </build>
+   
+   
+<distributionManagement>
+                    <repository>
+                    <id>bintray-allenai-maven</id>
+                <url>https://api.bintray.com/maven/allenai/maven/org.allenai.pdfbox:pdfbox</url>
+            </repository>
+        </distributionManagement>
 
 </project>
 

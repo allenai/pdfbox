@@ -21,7 +21,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>org.allenai.pdfbox</groupId>
+    <groupId>org.apache.pdfbox</groupId>
     <artifactId>pdfbox-parent</artifactId>
     <version>2.0.0-AI3-SNAPSHOT</version>
     <relativePath>../parent/pom.xml</relativePath>
@@ -64,7 +64,7 @@
             <Embed-Dependency>*;scope=provided;inline=org/apache/**|org/bouncycastle/**</Embed-Dependency>
             <Bundle-DocURL>${project.url}</Bundle-DocURL>
             <Import-Package>!junit.framework,!junit.textui,javax.*;resolution:=optional,org.apache.avalon.framework.logger;resolution:=optional,org.apache.log;resolution:=optional,org.apache.log4j;resolution:=optional,*</Import-Package>
-            <Main-Class>org.allenai.pdfbox.debugger.PDFDebugger</Main-Class>
+            <Main-Class>org.apache.pdfbox.debugger.PDFDebugger</Main-Class>
           </instructions>
         </configuration>
       </plugin>
