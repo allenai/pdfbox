@@ -38,6 +38,9 @@ public class DictionaryEncoding extends Encoding
 
     /**
      * Creates a new DictionaryEncoding for embedding.
+     *
+     * @param baseEncoding
+     * @param differences
      */
     public DictionaryEncoding(COSName baseEncoding, COSArray differences)
     {
@@ -59,7 +62,8 @@ public class DictionaryEncoding extends Encoding
             throw new IllegalArgumentException("Invalid encoding: " + baseEncoding);
         }
         
-        codeToName.putAll( this.baseEncoding.codeToName );
+        codeToName.putAll(this.baseEncoding.codeToName);
+        inverted.putAll(this.baseEncoding.inverted);
         applyDifferences();
     }
 
@@ -87,10 +91,11 @@ public class DictionaryEncoding extends Encoding
         encoding = fontEncoding;
 
         Encoding base = null;
-        if (encoding.containsKey(COSName.BASE_ENCODING))
+        boolean hasBaseEncoding = encoding.containsKey(COSName.BASE_ENCODING);
+        if (hasBaseEncoding)
         {
             COSName name = encoding.getCOSName(COSName.BASE_ENCODING);
-            base = Encoding.getInstance(name); // may be null
+            base = Encoding.getInstance(name); // null when the name is invalid
         }
 
         if (base == null)
@@ -109,6 +114,8 @@ public class DictionaryEncoding extends Encoding
                 }
                 else
                 {
+                    // triggering this error indicates a bug in PDFBox. Every font should always have
+                    // a built-in encoding, if not, we parsed it incorrectly.
                     throw new IllegalArgumentException("Symbolic fonts must have a built-in " + 
                                                        "encoding");
                 }
@@ -116,18 +123,24 @@ public class DictionaryEncoding extends Encoding
         }
         baseEncoding = base;
 
-        codeToName.putAll( baseEncoding.codeToName );
+        codeToName.putAll(baseEncoding.codeToName);
+        inverted.putAll(baseEncoding.inverted);
         applyDifferences();
     }
 
     private void applyDifferences()
     {
         // now replace with the differences
-        COSArray differences = (COSArray)encoding.getDictionaryObject( COSName.DIFFERENCES );
-        int currentIndex = -1;
-        for( int i=0; differences != null && i<differences.size(); i++ )
+        COSBase base = encoding.getDictionaryObject(COSName.DIFFERENCES);
+        if (!(base instanceof COSArray))
         {
-            COSBase next = differences.getObject( i );
+            return;
+        }
+        COSArray diffArray = (COSArray) base;
+        int currentIndex = -1;
+        for (int i = 0; i < diffArray.size(); i++)
+        {
+            COSBase next = diffArray.getObject(i);
             if( next instanceof COSNumber)
             {
                 currentIndex = ((COSNumber)next).intValue();
@@ -158,13 +171,15 @@ public class DictionaryEncoding extends Encoding
         return differences;
     }
 
-    /**
-     * Convert this standard java object to a COS object.
-     *
-     * @return The cos object that matches this Java object.
-     */
+    @Override
     public COSBase getCOSObject()
     {
         return encoding;
+    }
+
+    @Override
+    public String getEncodingName()
+    {
+        return baseEncoding.getEncodingName() + " with differences";
     }
 }

@@ -52,13 +52,20 @@ public class ImportFDF
     {
         PDDocumentCatalog docCatalog = pdfDocument.getDocumentCatalog();
         PDAcroForm acroForm = docCatalog.getAcroForm();
+        if (acroForm == null)
+        {
+            return;
+        }
         acroForm.setCacheFields( true );
         acroForm.importFDF( fdfDocument );
+        
+        //TODO this can be removed when we create appearance streams
+        acroForm.setNeedAppearances(true);
     }
 
     /**
      * This will import an fdf document and write out another pdf.
-     * <br />
+     * <br>
      * see usage() for commandline
      *
      * @param args command line arguments

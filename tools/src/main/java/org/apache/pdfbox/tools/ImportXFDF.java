@@ -59,7 +59,7 @@ public class ImportXFDF
 
     /**
      * This will import an fdf document and write out another pdf.
-     * <br />
+     * <br>
      * see usage() for commandline
      *
      * @param args command line arguments
@@ -94,7 +94,6 @@ public class ImportXFDF
 
                 importer.importFDF( pdf, fdf );
                 pdf.save( args[2] );
-                fdf.save( "tmp/outputXFDFtoPDF.fdf");
             }
         }
         finally

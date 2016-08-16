@@ -50,7 +50,7 @@ import org.apache.pdfbox.pdmodel.common.PDStream;
 abstract class TrueTypeEmbedder implements Subsetter
 {
     private static final int ITALIC = 1;
-    private static final int OBLIQUE = 256;
+    private static final int OBLIQUE = 512;
     private static final String BASE25 = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     private final PDDocument document;
@@ -87,22 +87,31 @@ abstract class TrueTypeEmbedder implements Subsetter
         this.ttf = ttf;
         fontDescriptor = createFontDescriptor(ttf);
 
+        PDStream stream = new PDStream(document, ttf.getOriginalData(), COSName.FLATE_DECODE);
+        stream.getCOSObject().setInt(COSName.LENGTH1, stream.toByteArray().length);
+        fontDescriptor.setFontFile2(stream);
+
         dict.setName(COSName.BASE_FONT, ttf.getName());
 
         // choose a Unicode "cmap"
         cmap = ttf.getUnicodeCmap();
     }
 
-    public void buildFontFile2(InputStream ttfStream) throws IOException
+    public final void buildFontFile2(InputStream ttfStream) throws IOException
     {
         PDStream stream = new PDStream(document, ttfStream, COSName.FLATE_DECODE);
-        stream.getStream().setInt(COSName.LENGTH1, stream.toByteArray().length);
+        stream.getCOSObject().setInt(COSName.LENGTH1, stream.toByteArray().length);
 
         // as the stream was closed within the PDStream constructor, we have to recreate it
         InputStream input = null;
         try
         {
             input = stream.createInputStream();
+            if (ttf != null)
+            {
+                // close the replaced true type font
+                ttf.close();
+            }
             ttf = new TTFParser().parseEmbedded(input);
             if (!isEmbeddingPermitted(ttf))
             {
@@ -180,8 +189,7 @@ abstract class TrueTypeEmbedder implements Subsetter
                          ttf.getHorizontalHeader().getNumberOfHMetrics() == 1);
 
         int fsSelection = os2.getFsSelection();
-        fd.setItalic((fsSelection & ITALIC) == fsSelection ||
-                     (fsSelection & OBLIQUE) == fsSelection);
+        fd.setItalic(((fsSelection & (ITALIC | OBLIQUE)) != 0));
 
         switch (os2.getFamilyClass())
         {
@@ -305,6 +313,7 @@ abstract class TrueTypeEmbedder implements Subsetter
 
         // re-build the embedded font
         buildSubset(new ByteArrayInputStream(out.toByteArray()), tag, gidToCid);
+        ttf.close();
     }
 
     /**

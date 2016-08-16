@@ -25,6 +25,8 @@ import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionFactory;
 import org.apache.pdfbox.pdmodel.interactive.action.PDAction;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
+import org.apache.pdfbox.pdmodel.interactive.annotation.handlers.PDAppearanceHandler;
+import org.apache.pdfbox.pdmodel.interactive.annotation.handlers.PDLinkAppearanceHandler;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDDestination;
 
 /**
@@ -57,6 +59,11 @@ public class PDAnnotationLink extends PDAnnotation
      * The type of annotation.
      */
     public static final String SUB_TYPE = "Link";
+    
+    /**
+     * Custom apperance handler to generate an appearance stream.
+     */
+    private PDAppearanceHandler customAppearanceHandler;
 
     /**
      * Constructor.
@@ -78,11 +85,10 @@ public class PDAnnotationLink extends PDAnnotation
     }
 
     /**
-     * Get the action to be performed when this annotation is to be activated.
+     * Get the action to be performed when this annotation is to be activated. Either this or the
+     * destination entry should be set, but not both.
      *
      * @return The action to be performed when this annotation is activated.
-     *
-     * TODO not all annotations have an A entry
      */
     public PDAction getAction()
     {
@@ -91,9 +97,10 @@ public class PDAnnotationLink extends PDAnnotation
     }
 
     /**
-     * Set the annotation action. As of PDF 1.6 this is only used for Widget Annotations
-     * 
-     * @param action The annotation action. TODO not all annotations have an A entry
+     * Set the annotation action. Either this or the destination entry should be set, but not both.
+     *
+     * @param action The annotation action.
+     *
      */
     public void setAction(PDAction action)
     {
@@ -103,8 +110,8 @@ public class PDAnnotationLink extends PDAnnotation
     /**
      * This will set the border style dictionary, specifying the width and dash pattern used in drawing the line.
      *
-     * @param bs the border style dictionary to set. TODO not all annotations may have a BS entry
-     *
+     * @param bs the border style dictionary to set. 
+     * 
      */
     public void setBorderStyle(PDBorderStyleDictionary bs)
     {
@@ -112,26 +119,24 @@ public class PDAnnotationLink extends PDAnnotation
     }
 
     /**
-     * This will retrieve the border style dictionary, specifying the width and dash pattern used in drawing the line.
+     * This will retrieve the border style dictionary, specifying the width and dash pattern used in
+     * drawing the line.
      *
      * @return the border style dictionary.
      */
     public PDBorderStyleDictionary getBorderStyle()
     {
-        COSBase bs = this.getCOSObject().getDictionaryObject(COSName.BS);
+        COSBase bs = getCOSObject().getDictionaryObject(COSName.BS);
         if (bs instanceof COSDictionary)
         {
             return new PDBorderStyleDictionary((COSDictionary) bs);
         }
-        else
-        {
-            return null;
-        }
+        return null;
     }
 
     /**
-     * Get the destination to be displayed when the annotation is activated. Either this or the A should be set but not
-     * both.
+     * Get the destination to be displayed when the annotation is activated. Either this or the
+     * action entry should be set, but not both.
      *
      * @return The destination for this annotation.
      *
@@ -140,13 +145,11 @@ public class PDAnnotationLink extends PDAnnotation
     public PDDestination getDestination() throws IOException
     {
         COSBase base = getCOSObject().getDictionaryObject(COSName.DEST);
-        PDDestination retval = PDDestination.create(base);
-
-        return retval;
+        return PDDestination.create(base);
     }
 
     /**
-     * The new destination value.
+     * The new destination value. Either this or the action entry should be set, but not both.
      *
      * @param dest The updated destination.
      */
@@ -197,10 +200,7 @@ public class PDAnnotationLink extends PDAnnotation
         {
             return new PDActionURI(pa);
         }
-        else
-        {
-            return null;
-        }
+        return null;
     }
 
     /**
@@ -227,9 +227,30 @@ public class PDAnnotationLink extends PDAnnotation
         {
             return quadPoints.toFloatArray();
         }
+        // Should never happen as this is a required item
+        return null; 
+    }
+    
+    /**
+     * Set a custom appearance handler for generating the annotations appearance streams.
+     * 
+     * @param customAppearanceHandler
+     */
+    public void setCustomAppearanceHandler(PDAppearanceHandler customAppearanceHandler)
+    {
+        this.customAppearanceHandler = customAppearanceHandler;
+    }
+    
+    public void constructAppearances()
+    {
+        if (customAppearanceHandler == null)
+        {
+            PDLinkAppearanceHandler appearanceHandler = new PDLinkAppearanceHandler(this);
+            appearanceHandler.generateAppearanceStreams();
+        }
         else
         {
-            return null; // Should never happen as this is a required item
+            customAppearanceHandler.generateAppearanceStreams();
         }
     }
 }

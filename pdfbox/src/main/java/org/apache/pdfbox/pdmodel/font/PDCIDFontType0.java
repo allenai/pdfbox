@@ -57,10 +57,10 @@ public class PDCIDFontType0 extends PDCIDFont
     private final Map<Integer, Float> glyphHeights = new HashMap<Integer, Float>();
     private final boolean isEmbedded;
     private final boolean isDamaged;
-
+    private final AffineTransform fontMatrixTransform;
     private Float avgWidth = null;
     private Matrix fontMatrix;
-    private final AffineTransform fontMatrixTransform;
+    private BoundingBox fontBBox;
 
     /**
      * Constructor.
@@ -96,7 +96,7 @@ public class PDCIDFontType0 extends PDCIDFont
             CFFParser cffParser = new CFFParser();
             try
             {
-                cffFont = cffParser.parse(bytes).get(0);
+                cffFont = cffParser.parse(bytes, new ByteSource()).get(0);
             }
             catch (IOException e)
             {
@@ -188,9 +188,18 @@ public class PDCIDFontType0 extends PDCIDFont
         }
         return fontMatrix;
     }
-
+    
     @Override
     public BoundingBox getBoundingBox()
+    {
+        if (fontBBox == null)
+        {
+            fontBBox = generateBoundingBox();
+        }
+        return fontBBox;
+    }
+
+    private BoundingBox generateBoundingBox()
     {
         if (getFontDescriptor() != null) {
             PDRectangle bbox = getFontDescriptor().getFontBoundingBox();
@@ -305,6 +314,12 @@ public class PDCIDFontType0 extends PDCIDFont
         {
             return t1Font.getPath(getGlyphName(code));
         }
+    }
+
+    @Override
+    public GeneralPath getNormalizedPath(int code) throws IOException
+    {
+        return getPath(code);
     }
 
     @Override
@@ -427,5 +442,15 @@ public class PDCIDFontType0 extends PDCIDFont
     {
         // todo: not implemented, highly suspect
         return 500;
+    }
+
+    private class ByteSource implements CFFParser.ByteSource
+    {
+        @Override
+        public byte[] getBytes() throws IOException
+        {
+            PDStream ff3Stream = getFontDescriptor().getFontFile3();
+            return IOUtils.toByteArray(ff3Stream.createInputStream());
+        }
     }
 }

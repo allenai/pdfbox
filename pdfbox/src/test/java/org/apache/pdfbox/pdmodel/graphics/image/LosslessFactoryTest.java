@@ -29,6 +29,7 @@ import junit.framework.TestCase;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import static org.apache.pdfbox.pdmodel.graphics.image.ValidateXImage.checkIdent;
@@ -95,7 +96,7 @@ public class LosslessFactoryTest extends TestCase
         // if something goes wrong in the future and we want to have a PDF to open.
         PDPage page = new PDPage();
         document.addPage(page);
-        PDPageContentStream contentStream = new PDPageContentStream(document, page, true, false);
+        PDPageContentStream contentStream = new PDPageContentStream(document, page, AppendMode.APPEND, false);
         contentStream.drawImage(ximage1, 200, 300, ximage1.getWidth() / 2, ximage1.getHeight() / 2);
         contentStream.drawImage(ximage2, 200, 450, ximage2.getWidth() / 2, ximage2.getHeight() / 2);
         contentStream.drawImage(ximage3, 200, 600, ximage3.getWidth() / 2, ximage3.getHeight() / 2);
@@ -197,6 +198,15 @@ public class LosslessFactoryTest extends TestCase
                 argbImage.setRGB(x, y, (argbImage.getRGB(x, y) & 0xFFFFFF) | ((y / 10 * 10) << 24));
             }
         }
+
+        // extra for PDFBOX-3181: check for exception due to different sizes of 
+        // alphaRaster.getSampleModel().getWidth()
+        // and
+        // alphaRaster.getWidth()
+        // happens with image returned by BufferedImage.getSubimage()
+        argbImage = argbImage.getSubimage(1, 1, argbImage.getWidth() - 2, argbImage.getHeight() - 2);
+        w -= 2;
+        h -= 2;
 
         PDImageXObject ximage = LosslessFactory.createFromImage(document, argbImage);
 
@@ -363,7 +373,7 @@ public class LosslessFactoryTest extends TestCase
 
         PDPage page = new PDPage();
         document.addPage(page);
-        PDPageContentStream contentStream = new PDPageContentStream(document, page, true, false);
+        PDPageContentStream contentStream = new PDPageContentStream(document, page, AppendMode.APPEND, false);
         contentStream.drawImage(ximage2, 150, 300, ximage2.getWidth(), ximage2.getHeight());
         contentStream.drawImage(ximage, 150, 300, ximage.getWidth(), ximage.getHeight());
         contentStream.close();

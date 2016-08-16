@@ -45,10 +45,12 @@ import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.PageMode;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.common.PDNumberTreeNode;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDMarkInfo;
 import org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDStructureTreeRoot;
+import org.apache.pdfbox.pdmodel.graphics.color.PDOutputIntent;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
@@ -70,6 +72,8 @@ public class PDFMergerUtility
     private String destinationFileName;
     private OutputStream destinationStream;
     private boolean ignoreAcroFormErrors = false;
+    private PDDocumentInformation destinationDocumentInformation = null;
+    private PDMetadata destinationMetadata = null;
 
     /**
      * Instantiate a new PDFMergerUtility.
@@ -121,6 +125,50 @@ public class PDFMergerUtility
     }
 
     /**
+     * Get the destination document information that is to be set in {@link #mergeDocuments(org.apache.pdfbox.io.MemoryUsageSetting)
+     * }. The default is null, which means that it is ignored.
+     *
+     * @return The destination document information.
+     */
+    public PDDocumentInformation getDestinationDocumentInformation()
+    {
+        return destinationDocumentInformation;
+    }
+
+    /**
+     * Set the destination document information that is to be set in {@link #mergeDocuments(org.apache.pdfbox.io.MemoryUsageSetting)
+     * }. The default is null, which means that it is ignored.
+     *
+     * @param info The destination document information.
+     */
+    public void setDestinationDocumentInformation(PDDocumentInformation info)
+    {
+        destinationDocumentInformation = info;
+    }
+
+    /**
+     * Set the destination metadata that is to be set in {@link #mergeDocuments(org.apache.pdfbox.io.MemoryUsageSetting)
+     * }. The default is null, which means that it is ignored.
+     *
+     * @return The destination metadata.
+     */
+    public PDMetadata getDestinationMetadata()
+    {
+        return destinationMetadata;
+    }
+
+    /**
+     * Set the destination metadata that is to be set in {@link #mergeDocuments(org.apache.pdfbox.io.MemoryUsageSetting)
+     * }. The default is null, which means that it is ignored.
+     *
+     * @param meta The destination metadata.
+     */
+    public void setDestinationMetadata(PDMetadata meta)
+    {
+        destinationMetadata = meta;
+    }
+
+    /**
      * Add a source file to the list of files to merge.
      *
      * @param source Full path and file name of source document.
@@ -168,6 +216,18 @@ public class PDFMergerUtility
     }
 
     /**
+     * Merge the list of source documents, saving the result in the destination file.
+     *
+     * @throws IOException If there is an error saving the document.
+     * @deprecated use {@link #mergeDocuments(org.apache.pdfbox.io.MemoryUsageSetting) }
+     */
+    @Deprecated
+    public void mergeDocuments() throws IOException
+    {
+        mergeDocuments(MemoryUsageSetting.setupMainMemoryOnly());
+    }
+
+    /**
      * Merge the list of source documents, saving the result in the destination
      * file.
      *
@@ -200,6 +260,17 @@ public class PDFMergerUtility
                     tobeclosed.add(source);
                     appendDocument(destination, source);
                 }
+                
+                // optionally set meta data
+                if (destinationDocumentInformation != null)
+                {
+                    destination.setDocumentInformation(destinationDocumentInformation);
+                }
+                if (destinationMetadata != null)
+                {
+                    destination.getDocumentCatalog().setMetadata(destinationMetadata);
+                }
+                
                 if (destinationStream == null)
                 {
                     destination.save(destinationFileName);
@@ -245,14 +316,6 @@ public class PDFMergerUtility
         if (destination.getDocument().isClosed())
         {
             throw new IOException("Error: destination PDF is closed.");
-        }
-        if (destination.isEncrypted())
-        {
-            throw new IOException("Error: destination PDF is encrypted, can't append encrypted PDF documents.");
-        }
-        if (source.isEncrypted())
-        {
-            throw new IOException("Error: source PDF is encrypted, can't append encrypted PDF documents.");
         }
 
         PDDocumentCatalog destCatalog = destination.getDocumentCatalog();
@@ -421,9 +484,18 @@ public class PDFMergerUtility
         if (destMetadata == null && srcMetadata != null)
         {
             PDStream newStream = new PDStream(destination, srcMetadata.createInputStream(), (COSName) null);
-            newStream.getStream().mergeInto(srcMetadata);
+            newStream.getCOSObject().mergeInto(srcMetadata);
             destCatalog.getCOSObject().setItem(COSName.METADATA, newStream);
         }
+
+        COSDictionary destOCP = (COSDictionary) destCatalog.getCOSObject().getDictionaryObject(COSName.OCPROPERTIES);
+        COSDictionary srcOCP = (COSDictionary) srcCatalog.getCOSObject().getDictionaryObject(COSName.OCPROPERTIES);
+        if (destOCP == null && srcOCP != null)
+        {
+            destCatalog.getCOSObject().setItem(COSName.OCPROPERTIES, cloner.cloneForNewDocument(srcOCP));
+        }
+
+        mergeOutputIntents(cloner, srcCatalog, destCatalog);
 
         // merge logical structure hierarchy if logical structure information is available in both source pdf and
         // destination pdf
@@ -531,6 +603,38 @@ public class PDFMergerUtility
             kDictLevel0.setItem(COSName.P, destStructTree);
             kDictLevel0.setItem(COSName.S, new COSString(STRUCTURETYPE_DOCUMENT));
             destStructTree.setK(kDictLevel0);
+        }
+    }
+
+    // copy outputIntents to destination, but avoid duplicate OutputConditionIdentifier,
+    // except when it is missing or is named "Custom".
+    private void mergeOutputIntents(PDFCloneUtility cloner, 
+            PDDocumentCatalog srcCatalog, PDDocumentCatalog destCatalog) throws IOException
+    {
+        List<PDOutputIntent> srcOutputIntents = srcCatalog.getOutputIntents();
+        List<PDOutputIntent> dstOutputIntents = destCatalog.getOutputIntents();
+        for (PDOutputIntent srcOI : srcOutputIntents)
+        {
+            String srcOCI = srcOI.getOutputConditionIdentifier();
+            if (srcOCI != null && !"Custom".equals(srcOCI))
+            {
+                // is that identifier already there?
+                boolean skip = false;
+                for (PDOutputIntent dstOI : dstOutputIntents)
+                {
+                    if (dstOI.getOutputConditionIdentifier().equals(srcOCI))
+                    {
+                        skip = true;
+                        break;
+                    }
+                }
+                if (skip)
+                {
+                    continue;
+                }
+            }
+            destCatalog.addOutputIntent(new PDOutputIntent((COSDictionary) cloner.cloneForNewDocument(srcOI)));
+            dstOutputIntents.add(srcOI);
         }
     }
 

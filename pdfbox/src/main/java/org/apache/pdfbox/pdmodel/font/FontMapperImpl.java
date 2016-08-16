@@ -30,8 +30,6 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import org.apache.fontbox.FontBoxFont;
-import org.apache.fontbox.cff.CFFFont;
-import org.apache.fontbox.cff.CFFType1Font;
 import org.apache.fontbox.ttf.OpenTypeFont;
 import org.apache.fontbox.ttf.TTFParser;
 import org.apache.fontbox.ttf.TrueTypeFont;
@@ -381,16 +379,16 @@ final class FontMapperImpl implements FontMapper
             return t1;
         }
 
-        CFFFont cff = (CFFFont)findFont(FontFormat.OTF, postScriptName);
-        if (cff instanceof CFFType1Font)
-        {
-            return cff;
-        }
-
         TrueTypeFont ttf = (TrueTypeFont)findFont(FontFormat.TTF, postScriptName);
         if (ttf != null)
         {
             return ttf;
+        }
+
+        OpenTypeFont otf = (OpenTypeFont) findFont(FontFormat.OTF, postScriptName);
+        if (otf != null)
+        {
+            return otf;
         }
 
         return null;
@@ -656,9 +654,12 @@ final class FontMapperImpl implements FontMapper
             {
                 return true;
             }
-            else return cidSystemInfo.getOrdering().equals("Korea1") &&
+            else
+            {
+                return cidSystemInfo.getOrdering().equals("Korea1") &&
                         (codePageRange & KOREAN_WANSUNG) == KOREAN_WANSUNG ||
                         (codePageRange & KOREAN_JOHAB) == KOREAN_JOHAB;
+            }
         }
     }
 

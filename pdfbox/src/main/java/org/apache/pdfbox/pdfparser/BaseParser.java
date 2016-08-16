@@ -18,6 +18,9 @@ package org.apache.pdfbox.pdfparser;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
 import java.util.Arrays;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -49,6 +52,8 @@ public abstract class BaseParser
     private static final long OBJECT_NUMBER_THRESHOLD = 10000000000L;
 
     private static final long GENERATION_NUMBER_THRESHOLD = 65535;
+
+    static final int MAX_LENGTH_LONG = Long.toString(Long.MAX_VALUE).length();
 
     /**
      * Log instance.
@@ -207,7 +212,7 @@ public abstract class BaseParser
             else
             {
                 // invalid dictionary, we were expecting a /Name, read until the end or until we can recover
-                LOG.warn("Invalid dictionary, found: '" + c + "' but expected: '/'");
+                LOG.warn("Invalid dictionary, found: '" + c + "' but expected: '/' at offset " + seqSource.getPosition());
                 if (readUntilEndOfCOSDictionary())
                 {
                     // we couldn't recover
@@ -292,6 +297,7 @@ public abstract class BaseParser
         }
         else
         {
+            // label this item as direct, to avoid signature problems.
             value.setDirect(true);
             obj.setItem(key, value);
         }
@@ -704,7 +710,8 @@ public abstract class BaseParser
     protected boolean isEndOfName(int ch)
     {
         return ch == ASCII_SPACE || ch == ASCII_CR || ch == ASCII_LF || ch == 9 || ch == '>' ||
-               ch == '<' || ch == '[' || ch =='/' || ch ==']' || ch ==')' || ch =='(';
+               ch == '<' || ch == '[' || ch =='/' || ch ==']' || ch ==')' || ch =='(' || 
+               ch == 0 || ch == '\f';
     }
 
     /**
@@ -723,18 +730,17 @@ public abstract class BaseParser
             int ch = c;
             if (ch == '#')
             {
-                char ch1 = (char) seqSource.read();
-                char ch2 = (char) seqSource.read();
-
+                int ch1 = seqSource.read();
+                int ch2 = seqSource.read();
                 // Prior to PDF v1.2, the # was not a special character.  Also,
                 // it has been observed that various PDF tools do not follow the
                 // spec with respect to the # escape, even though they report
                 // PDF versions of 1.2 or later.  The solution here is that we
                 // interpret the # as an escape only when it is followed by two
                 // valid hex digits.
-                if (isHexDigit(ch1) && isHexDigit(ch2))
+                if (isHexDigit((char)ch1) && isHexDigit((char)ch2))
                 {
-                    String hex = "" + ch1 + ch2;
+                    String hex = "" + (char)ch1 + (char)ch2;
                     try
                     {
                         buffer.write(Integer.parseInt(hex, 16));
@@ -747,6 +753,13 @@ public abstract class BaseParser
                 }
                 else
                 {
+                    // check for premature EOF
+                    if (ch2 == -1 || ch1 == -1)
+                    {
+                        LOG.error("Premature EOF in BaseParser#parseCOSName");
+                        c = -1;
+                        break;
+                    }
                     seqSource.unread(ch2);
                     c = ch1;
                     buffer.write(ch);
@@ -766,10 +779,38 @@ public abstract class BaseParser
         {
             seqSource.unread(c);
         }
-        String string = new String(buffer.toByteArray(), Charsets.UTF_8);
+        
+        byte[] bytes = buffer.toByteArray();
+        String string;
+        if (isValidUTF8(bytes))
+        {
+            string = new String(buffer.toByteArray(), Charsets.UTF_8);
+        }
+        else
+        {
+            // some malformed PDFs don't use UTF-8 see PDFBOX-3347
+            string = new String(buffer.toByteArray(), Charsets.ISO_8859_1);
+        }
         return COSName.getPDFName(string);
     }
 
+    /**
+     * Returns true if a byte sequence is valid UTF-8.
+     */
+    private boolean isValidUTF8(byte[] input)
+    {
+        CharsetDecoder cs = Charsets.UTF_8.newDecoder();
+        try
+        {
+            cs.decode(ByteBuffer.wrap(input));
+            return true;
+        }
+        catch (CharacterCodingException e)
+        {
+            return false;
+        }
+    }
+    
     /**
      * This will parse a boolean object from the stream.
      *
@@ -940,7 +981,7 @@ public abstract class BaseParser
                     // we can end up in an infinite loop otherwise
                     throw new IOException( "Unknown dir object c='" + c +
                             "' cInt=" + (int)c + " peek='" + (char)peek 
-                            + "' peekInt=" + peek + " " + seqSource.getPosition() );
+                            + "' peekInt=" + peek + " at offset " + seqSource.getPosition() );
                 }
 
                 // if it's an endstream/endobj, we want to put it back so the caller will see it
@@ -1364,6 +1405,11 @@ public abstract class BaseParser
                 lastByte != -1 )
         {
             buffer.append( (char)lastByte );
+            if (buffer.length() > MAX_LENGTH_LONG)
+            {
+                throw new IOException("Number '" + buffer + 
+                        "' is getting too long, stop reading at offset " + seqSource.getPosition());
+            }
         }
         if( lastByte != -1 )
         {

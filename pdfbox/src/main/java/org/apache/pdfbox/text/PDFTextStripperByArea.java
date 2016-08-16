@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Vector;
 import org.apache.pdfbox.pdmodel.PDPage;
 
 /**
@@ -36,8 +35,8 @@ public class PDFTextStripperByArea extends PDFTextStripper
 {
     private final List<String> regions = new ArrayList<String>();
     private final Map<String, Rectangle2D> regionArea = new HashMap<String, Rectangle2D>();
-    private final Map<String, Vector<List<TextPosition>>> regionCharacterList
-            = new HashMap<String, Vector<List<TextPosition>>>();
+    private final Map<String, ArrayList<List<TextPosition>>> regionCharacterList
+            = new HashMap<String, ArrayList<List<TextPosition>>>();
     private final Map<String, StringWriter> regionText = new HashMap<String, StringWriter>();
 
     /**
@@ -57,7 +56,7 @@ public class PDFTextStripperByArea extends PDFTextStripper
      * @param aShouldSeparateByBeads The new grouping of beads.
      */
     @Override
-    public void setShouldSeparateByBeads(boolean aShouldSeparateByBeads)
+    public final void setShouldSeparateByBeads(boolean aShouldSeparateByBeads)
     {
     }
 
@@ -73,6 +72,17 @@ public class PDFTextStripperByArea extends PDFTextStripper
         regionArea.put( regionName, rect );
     }
 
+    /**
+     * Delete a region to group text by. If the region does not exist, this method does nothing.
+     *
+     * @param regionName The name of the region to delete.
+     */
+    public void removeRegion(String regionName)
+    {
+        regions.remove(regionName);
+        regionArea.remove(regionName);
+    }
+    
     /**
      * Get the list of regions that have been setup.
      *
@@ -111,7 +121,7 @@ public class PDFTextStripperByArea extends PDFTextStripper
             //reset the stored text for the region so this class
             //can be reused.
             String regionName = regionIter.next();
-            Vector<List<TextPosition>> regionCharactersByArticle = new Vector<List<TextPosition>>();
+            ArrayList<List<TextPosition>> regionCharactersByArticle = new ArrayList<List<TextPosition>>();
             regionCharactersByArticle.add( new ArrayList<TextPosition>() );
             regionCharacterList.put( regionName, regionCharactersByArticle );
             regionText.put( regionName, new StringWriter() );

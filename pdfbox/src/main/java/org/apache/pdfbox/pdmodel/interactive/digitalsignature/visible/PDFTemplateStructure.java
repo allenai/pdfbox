@@ -17,15 +17,11 @@
 package org.apache.pdfbox.pdmodel.interactive.digitalsignature.visible;
 
 import java.awt.geom.AffineTransform;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.List;
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSDocument;
 import org.apache.pdfbox.cos.COSName;
-import org.apache.pdfbox.pdfwriter.COSWriter;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
@@ -52,16 +48,16 @@ public class PDFTemplateStructure
     private PDSignatureField signatureField;
     private PDSignature pdSignature;
     private COSDictionary acroFormDictionary;
-    private PDRectangle singatureRectangle;
+    private PDRectangle signatureRectangle;
     private AffineTransform affineTransform;
     private COSArray procSet;
     private PDImageXObject image;
-    private PDRectangle formaterRectangle;
+    private PDRectangle formatterRectangle;
     private PDStream holderFormStream;
     private PDResources holderFormResources;
     private PDFormXObject holderForm;
     private PDAppearanceDictionary appearanceDictionary;
-    private PDStream innterFormStream;
+    private PDStream innerFormStream;
     private PDResources innerFormResources;
     private PDFormXObject innerForm;
     private PDStream imageFormStream;
@@ -74,6 +70,8 @@ public class PDFTemplateStructure
     private PDFormXObject imageForm;
     private COSDictionary widgetDictionary;
 
+    // no constructor
+    
     /**
      * Returns document page.
      * @return the page
@@ -181,7 +179,7 @@ public class PDFTemplateStructure
     /**
      * Acroform have its Dictionary, so we here set
      * the Dictionary  which is in this location:
-     * <b> AcroForm/DR <b>
+     * <b> AcroForm/DR </b>
      * @param acroFormDictionary
      */
     public void setAcroFormDictionary(COSDictionary acroFormDictionary)
@@ -193,18 +191,18 @@ public class PDFTemplateStructure
      * Gets SignatureRectangle
      * @return the rectangle for the signature
      */
-    public PDRectangle getSingatureRectangle()
+    public PDRectangle getSignatureRectangle()
     {
-        return singatureRectangle;
+        return signatureRectangle;
     }
 
     /**
      * Sets SignatureRectangle
-     * @param singatureRectangle
+     * @param signatureRectangle
      */
-    public void setSignatureRectangle(PDRectangle singatureRectangle)
+    public void setSignatureRectangle(PDRectangle signatureRectangle)
     {
-        this.singatureRectangle = singatureRectangle;
+        this.signatureRectangle = signatureRectangle;
     }
 
     /**
@@ -265,18 +263,18 @@ public class PDFTemplateStructure
      * Gets formatter rectangle
      * @return the formatter rectangle
      */
-    public PDRectangle getFormaterRectangle()
+    public PDRectangle getFormatterRectangle()
     {
-        return formaterRectangle;
+        return formatterRectangle;
     }
 
     /**
      * Sets formatter rectangle
-     * @param formaterRectangle
+     * @param formatterRectangle
      */
-    public void setFormaterRectangle(PDRectangle formaterRectangle)
+    public void setFormatterRectangle(PDRectangle formatterRectangle)
     {
-        this.formaterRectangle = formaterRectangle;
+        this.formatterRectangle = formatterRectangle;
     }
 
     /**
@@ -360,18 +358,18 @@ public class PDFTemplateStructure
      * Gets Inner form Stream.
      * @return the inner form stream
      */
-    public PDStream getInnterFormStream()
+    public PDStream getInnerFormStream()
     {
-        return innterFormStream;
+        return innerFormStream;
     }
 
     /**
      * Sets inner form stream
-     * @param innterFormStream
+     * @param innerFormStream
      */
-    public void setInnterFormStream(PDStream innterFormStream)
+    public void setInnterFormStream(PDStream innerFormStream)
     {
-        this.innterFormStream = innterFormStream;
+        this.innerFormStream = innerFormStream;
     }
 
     /**
@@ -566,25 +564,6 @@ public class PDFTemplateStructure
     public void setAcroFormFields(List<PDField> acroFormFields)
     {
         this.acroFormFields = acroFormFields;
-    }
-    
-   /**
-    * Gets AP of the created template
-    * @return the templates Appearance Stream
-    * @throws IOException
-    */
-    public ByteArrayInputStream getTemplateAppearanceStream() throws IOException
-    {
-        COSDocument visualSignature = getVisualSignature();
-        ByteArrayOutputStream memoryOut = new ByteArrayOutputStream();
-        COSWriter memoryWriter = new COSWriter(memoryOut);
-        memoryWriter.write(visualSignature);
-
-        ByteArrayInputStream input = new ByteArrayInputStream(memoryOut.toByteArray());
-
-        getTemplate().close();
-
-        return input;
     }
 
     /**

@@ -45,6 +45,7 @@ public class PDXObject implements COSObjectable
      * Creates a new XObject instance of the appropriate type for the COS stream.
      *
      * @param base The stream which is wrapped by this XObject.
+     * @param resources
      * @return A new XObject instance.
      * @throws java.io.IOException if there is an error creating the XObject.
      */
@@ -91,6 +92,7 @@ public class PDXObject implements COSObjectable
     /**
      * Creates a new XObject from the given stream and subtype.
      * @param stream The stream to read.
+     * @param subtype
      */
     protected PDXObject(COSStream stream, COSName subtype)
     {
@@ -103,13 +105,14 @@ public class PDXObject implements COSObjectable
     /**
      * Creates a new XObject from the given stream and subtype.
      * @param stream The stream to read.
+     * @param subtype
      */
     protected PDXObject(PDStream stream, COSName subtype)
     {
         this.stream = stream;
         // could be used for writing:
-        stream.getStream().setName(COSName.TYPE, COSName.XOBJECT.getName());
-        stream.getStream().setName(COSName.SUBTYPE, subtype.getName());
+        stream.getCOSObject().setName(COSName.TYPE, COSName.XOBJECT.getName());
+        stream.getCOSObject().setName(COSName.SUBTYPE, subtype.getName());
     }
 
     /**
@@ -120,8 +123,8 @@ public class PDXObject implements COSObjectable
     protected PDXObject(PDDocument document, COSName subtype)
     {
         stream = new PDStream(document);
-        stream.getStream().setName(COSName.TYPE, COSName.XOBJECT.getName());
-        stream.getStream().setName(COSName.SUBTYPE, subtype.getName());
+        stream.getCOSObject().setName(COSName.TYPE, COSName.XOBJECT.getName());
+        stream.getCOSObject().setName(COSName.SUBTYPE, subtype.getName());
     }
 
     /**
@@ -129,7 +132,7 @@ public class PDXObject implements COSObjectable
      * {@inheritDoc}
      */
     @Override
-    public final COSBase getCOSObject()
+    public final COSStream getCOSObject()
     {
         return stream.getCOSObject();
     }
@@ -137,10 +140,12 @@ public class PDXObject implements COSObjectable
     /**
      * Returns the stream.
      * @return The stream for this object.
+     * @deprecated use {@link #getCOSObject() }
      */
+    @Deprecated
     public final COSStream getCOSStream()
     {
-        return stream.getStream();
+        return stream.getCOSObject();
     }
 
     /**

@@ -16,16 +16,21 @@
  */
 package org.apache.pdfbox.pdmodel.graphics.image;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.filter.Filter;
+import org.apache.pdfbox.filter.FilterFactory;
 import org.apache.pdfbox.io.RandomAccess;
 import org.apache.pdfbox.io.RandomAccessFile;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
 
 /**
@@ -41,13 +46,75 @@ public final class CCITTFactory
     }
     
     /**
-     * Creates a new CCITT Fax compressed Image XObject from the first page of 
-     * a TIFF file.
+     * Creates a new CCITT group 4 (T6) compressed image XObject from a b/w BufferedImage. This
+     * compression technique usually results in smaller images than those produced by {@link LosslessFactory#createFromImage(PDDocument, BufferedImage)
+     * }.
+     *
+     * @param document the document to create the image as part of.
+     * @param image the image.
+     * @return a new image XObject.
+     * @throws IOException if there is an error creating the image.
+     * @throws IllegalArgumentException if the BufferedImage is not a b/w image.
+     */
+    public static PDImageXObject createFromImage(PDDocument document, BufferedImage image)
+            throws IOException
+    {
+        if (image.getType() != BufferedImage.TYPE_BYTE_BINARY && image.getColorModel().getPixelSize() != 1)
+        {
+            throw new IllegalArgumentException("Only 1-bit b/w images supported");
+        }
+        
+        int height = image.getHeight();
+        int width = image.getWidth();
+
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        MemoryCacheImageOutputStream mcios = new MemoryCacheImageOutputStream(bos);
+
+        for (int y = 0; y < height; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                // flip bit to avoid having to set /BlackIs1
+                mcios.writeBits(~(image.getRGB(x, y) & 1), 1);
+            }
+            while (mcios.getBitOffset() != 0)
+            {
+                mcios.writeBit(0);
+            }
+        }
+        mcios.flush();
+        mcios.close();
+
+        return prepareImageXObject(document, bos.toByteArray(), width, height, PDDeviceGray.INSTANCE);
+    }
+
+    private static PDImageXObject prepareImageXObject(PDDocument document,
+            byte[] byteArray, int width, int height,
+            PDColorSpace initColorSpace) throws IOException
+    {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+        Filter filter = FilterFactory.INSTANCE.getFilter(COSName.CCITTFAX_DECODE);
+        COSDictionary dict = new COSDictionary();
+        dict.setInt(COSName.COLUMNS, width);
+        dict.setInt(COSName.ROWS, height);
+        filter.encode(new ByteArrayInputStream(byteArray), baos, dict, 0);
+
+        ByteArrayInputStream encodedByteStream = new ByteArrayInputStream(baos.toByteArray());
+        PDImageXObject image = new PDImageXObject(document, encodedByteStream, COSName.CCITTFAX_DECODE,
+                width, height, 1, initColorSpace);
+        dict.setInt(COSName.K, -1);
+        image.getCOSObject().setItem(COSName.DECODE_PARMS, dict);
+        return image;
+    }
+   
+    /**
+     * Creates a new CCITT Fax compressed image XObject from the first image of a TIFF file.
      * 
      * @param document the document to create the image as part of.
      * @param reader the random access TIFF file which contains a suitable CCITT
      * compressed image
-     * @return a new Image XObject
+     * @return a new image XObject
      * @throws IOException if there is an error reading the TIFF data.
      * 
      * @deprecated Use {@link #createFromFile(PDDocument, File)} instead.
@@ -60,13 +127,13 @@ public final class CCITTFactory
     }
 
     /**
-     * Creates a new CCITT Fax compressed Image XObject from a TIFF file.
+     * Creates a new CCITT Fax compressed image XObject from a specific image of a TIFF file.
      *
      * @param document the document to create the image as part of.
      * @param reader the random access TIFF file which contains a suitable CCITT
      * compressed image
      * @param number TIFF image number, starting from 0
-     * @return a new Image XObject, or null if no such page
+     * @return a new image XObject, or null if no such page
      * @throws IOException if there is an error reading the TIFF data.
      * 
      * @deprecated Use {@link #createFromFile(PDDocument, File, int)} instead.
@@ -79,8 +146,12 @@ public final class CCITTFactory
     }
 
     /**
-     * Creates a new CCITT Fax compressed Image XObject from the first page of 
-     * a TIFF file.
+     * Creates a new CCITT Fax compressed image XObject from the first image of a TIFF file. Only
+     * single-strip CCITT T4 or T6 compressed TIFF files are supported. If you're not sure what TIFF
+     * files you have, use
+     * {@link LosslessFactory#createFromImage(org.apache.pdfbox.pdmodel.PDDocument, java.awt.image.BufferedImage)}
+     * or {@link CCITTFactory#createFromImage(PDDocument, BufferedImage) }
+     * instead.
      *
      * @param document the document to create the image as part of.
      * @param file the  TIFF file which contains a suitable CCITT compressed image
@@ -94,11 +165,15 @@ public final class CCITTFactory
     }
 
     /**
-     * Creates a new CCITT Fax compressed Image XObject from the first page of 
-     * a TIFF file.
+     * Creates a new CCITT Fax compressed image XObject from a specific image of a TIFF file. Only
+     * single-strip CCITT T4 or T6 compressed TIFF files are supported. If you're not sure what TIFF
+     * files you have, use
+     * {@link LosslessFactory#createFromImage(PDDocument, BufferedImage) }
+     * or {@link CCITTFactory#createFromImage(PDDocument, BufferedImage) }
+     * instead.
      *
      * @param document the document to create the image as part of.
-     * @param file the  TIFF file which contains a suitable CCITT compressed image
+     * @param file the TIFF file which contains a suitable CCITT compressed image
      * @param number TIFF image number, starting from 0
      * @return a new Image XObject
      * @throws IOException if there is an error reading the TIFF data.
@@ -110,7 +185,7 @@ public final class CCITTFactory
     }
     
     /**
-     * Creates a new CCITT Fax compressed Image XObject from a TIFF file.
+     * Creates a new CCITT Fax compressed image XObject from a TIFF file.
      * 
      * @param document the document to create the image as part of.
      * @param reader the random access TIFF file which contains a suitable CCITT
@@ -139,7 +214,7 @@ public final class CCITTFactory
                 1,
                 PDDeviceGray.INSTANCE);
         
-        COSDictionary dict = pdImage.getCOSStream();
+        COSDictionary dict = pdImage.getCOSObject();
         dict.setItem(COSName.DECODE_PARMS, decodeParms);
         return pdImage;
     }
@@ -277,11 +352,28 @@ public final class CCITTFactory
                         }
                         break;
                     }
+                    case 266:
+                    {
+                        if (val != 1)
+                        {
+                            throw new IOException("FillOrder " + val + " is not supported");
+                        }
+                        break;
+                    }
                     case 273:
                     {
                         if (count == 1)
                         {
                             dataoffset = val;
+                        }
+                        break;
+                    }
+                    case 274:
+                    {
+                        // http://www.awaresystems.be/imaging/tiff/tifftags/orientation.html
+                        if (val != 1)
+                        {
+                            throw new IOException("Orientation " + val + " is not supported");
                         }
                         break;
                     }
@@ -297,7 +389,8 @@ public final class CCITTFactory
                     {
                         if ((val & 1) != 0)
                         {
-                            k = 50; // T4 2D - arbitary positive K value
+                            // T4 2D - arbitary positive K value
+                            k = 50;
                         }
                         // http://www.awaresystems.be/imaging/tiff/tifftags/t4options.html
                         if ((val & 4) != 0)

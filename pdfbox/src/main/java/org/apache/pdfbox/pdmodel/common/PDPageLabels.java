@@ -379,7 +379,7 @@ public class PDPageLabels implements COSObjectable
             while (power < 3 && pageIndex > 0)
             {
                 buf.insert(0, ROMANS[power][pageIndex % 10]);
-                pageIndex = pageIndex / 10;
+                pageIndex /= 10;
                 power++;
             }
             // Prepend as many m as there are thousands (which is
@@ -397,14 +397,14 @@ public class PDPageLabels implements COSObjectable
         }
 
         /**
-         * A..Z, AA..ZZ, AAA..ZZZ ... labeling as described in PDF32000-1:2008,
+         * a..z, aa..zz, aaa..zzz ... labeling as described in PDF32000-1:2008,
          * Table 159, Page 375.
          */
         private static String makeLetterLabel(int num)
         {
             StringBuilder buf = new StringBuilder();
             int numLetters = num / 26 + Integer.signum(num % 26);
-            int letter = num % 26 + 26 * (1 - Integer.signum(num % 26)) + 64;
+            int letter = num % 26 + 26 * (1 - Integer.signum(num % 26)) + 'a' - 1;
             for (int i = 0; i < numLetters; i++)
             {
                 buf.appendCodePoint(letter);

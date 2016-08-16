@@ -18,7 +18,6 @@ package org.apache.fontbox.ttf;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -41,7 +40,7 @@ public class CmapSubtable
     private int platformEncodingId;
     private long subTableOffset;
     private int[] glyphIdToCharacterCode;
-    private final Map<Integer, Integer> characterCodeToGlyphId = new HashMap<Integer, Integer>();
+    private Map<Integer, Integer> characterCodeToGlyphId;
 
     /**
      * This will read the required data from the stream.
@@ -137,6 +136,7 @@ public class CmapSubtable
         }
 
         glyphIdToCharacterCode = newGlyphIdToCharacterCode(numGlyphs);
+        characterCodeToGlyphId = new HashMap<Integer, Integer>(numGlyphs);
         // -- Read all sub header
         for (long i = 0; i < nbGroups; ++i)
         {
@@ -225,6 +225,7 @@ public class CmapSubtable
     {
         long nbGroups = data.readUnsignedInt();
         glyphIdToCharacterCode = newGlyphIdToCharacterCode(numGlyphs);
+        characterCodeToGlyphId = new HashMap<Integer, Integer>(numGlyphs);
         for (long i = 0; i < nbGroups; ++i)
         {
             long firstCode = data.readUnsignedInt();
@@ -274,6 +275,7 @@ public class CmapSubtable
     protected void processSubtype13(TTFDataStream data, int numGlyphs) throws IOException
     {
         long nbGroups = data.readUnsignedInt();
+        characterCodeToGlyphId = new HashMap<Integer, Integer>(numGlyphs);
         for (long i = 0; i < nbGroups; ++i)
         {
             long firstCode = data.readUnsignedInt();
@@ -340,19 +342,22 @@ public class CmapSubtable
     {
         int firstCode = data.readUnsignedShort();
         int entryCount = data.readUnsignedShort();
-        Map<Integer, Integer> tmpGlyphToChar = new HashMap<Integer, Integer>();
+        // skip emtpy tables
+        if (entryCount == 0)
+        {
+            return;
+        }
+        Map<Integer, Integer> tmpGlyphToChar = new HashMap<Integer, Integer>(numGlyphs);
+        characterCodeToGlyphId = new HashMap<Integer, Integer>(numGlyphs);
         int[] glyphIdArray = data.readUnsignedShortArray(entryCount);
+        int maxGlyphId = 0;
         for (int i = 0; i < entryCount; i++)
         {
+            maxGlyphId = Math.max(maxGlyphId, glyphIdArray[i]);
             tmpGlyphToChar.put(glyphIdArray[i], firstCode + i);
-            characterCodeToGlyphId.put((firstCode + i), glyphIdArray[i]);
+            characterCodeToGlyphId.put(firstCode + i, glyphIdArray[i]);
         }
-        glyphIdToCharacterCode = newGlyphIdToCharacterCode(Collections.max(tmpGlyphToChar.keySet()) + 1);
-        for (Entry<Integer, Integer> entry : tmpGlyphToChar.entrySet())
-        {
-            // link the glyphId with the right character code
-            glyphIdToCharacterCode[entry.getKey()] = entry.getValue();
-        }
+        buildGlyphIdToCharacterCodeLookup(tmpGlyphToChar, maxGlyphId);
     }
 
     /**
@@ -375,7 +380,9 @@ public class CmapSubtable
         int[] idDelta = data.readUnsignedShortArray(segCount);
         int[] idRangeOffset = data.readUnsignedShortArray(segCount);
 
-        Map<Integer, Integer> tmpGlyphToChar = new HashMap<Integer, Integer>();
+        Map<Integer, Integer> tmpGlyphToChar = new HashMap<Integer, Integer>(numGlyphs);
+        characterCodeToGlyphId = new HashMap<Integer, Integer>(numGlyphs);
+        int maxGlyphId = 0;
 
         long currentPosition = data.getCurrentPosition();
 
@@ -391,7 +398,8 @@ public class CmapSubtable
                 {
                     if (rangeOffset == 0)
                     {
-                        int glyphid = (j + delta) % 65536;
+                        int glyphid = (j + delta) & 0xFFFF;
+                        maxGlyphId = Math.max(glyphid, maxGlyphId);
                         tmpGlyphToChar.put(glyphid, j);
                         characterCodeToGlyphId.put(j, glyphid);
                     }
@@ -404,10 +412,10 @@ public class CmapSubtable
                         int glyphIndex = data.readUnsignedShort();
                         if (glyphIndex != 0)
                         {
-                            glyphIndex += delta;
-                            glyphIndex %= 65536;
+                            glyphIndex = (glyphIndex + delta) & 0xFFFF;
                             if (!tmpGlyphToChar.containsKey(glyphIndex))
                             {
+                                maxGlyphId = Math.max(glyphIndex, maxGlyphId);
                                 tmpGlyphToChar.put(glyphIndex, j);
                                 characterCodeToGlyphId.put(j, glyphIndex);
                             }
@@ -426,7 +434,12 @@ public class CmapSubtable
             LOG.warn("cmap format 4 subtable is empty");
             return;
         }
-        glyphIdToCharacterCode = newGlyphIdToCharacterCode(Collections.max(tmpGlyphToChar.keySet()) + 1);
+        buildGlyphIdToCharacterCodeLookup(tmpGlyphToChar, maxGlyphId);
+    }
+
+    private void buildGlyphIdToCharacterCodeLookup(Map<Integer, Integer> tmpGlyphToChar, int maxGlyphId)
+    {
+        glyphIdToCharacterCode = newGlyphIdToCharacterCode(maxGlyphId + 1);
         for (Entry<Integer, Integer> entry : tmpGlyphToChar.entrySet())
         {
             // link the glyphId with the right character code
@@ -464,6 +477,7 @@ public class CmapSubtable
         }
         long startGlyphIndexOffset = data.getCurrentPosition();
         glyphIdToCharacterCode = newGlyphIdToCharacterCode(numGlyphs);
+        characterCodeToGlyphId = new HashMap<Integer, Integer>(numGlyphs);
         for (int i = 0; i <= maxSubHeaderIndex; ++i)
         {
             SubHeader sh = subHeaders[i];
@@ -511,6 +525,7 @@ public class CmapSubtable
     {
         byte[] glyphMapping = data.read(256);
         glyphIdToCharacterCode = newGlyphIdToCharacterCode(256);
+        characterCodeToGlyphId = new HashMap<Integer, Integer>(glyphMapping.length);
         for (int i = 0; i < glyphMapping.length; i++)
         {
             int glyphIndex = (glyphMapping[i] + 256) % 256;

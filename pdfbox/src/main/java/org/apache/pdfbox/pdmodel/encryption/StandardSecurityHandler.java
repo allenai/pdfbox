@@ -109,7 +109,11 @@ public final class StandardSecurityHandler extends SecurityHandler
         {
             return DEFAULT_VERSION;
         }
-        else if(keyLength == 256)
+        else if (keyLength == 128 && policy.isPreferAES())
+        {
+            return 4;
+        }
+        else if (keyLength == 256)
         {
             return 5;
         }
@@ -136,6 +140,10 @@ public final class StandardSecurityHandler extends SecurityHandler
         {
             // note about revision 5: "Shall not be used. This value was used by a deprecated Adobe extension."
             return 6;    
+        }
+        if (version == 4)
+        {
+            return 4;
         }
         if ( version == 2 || version == 3 || policy.getPermissions().hasAnyRevision3PermissionSet())
         {
@@ -229,6 +237,7 @@ public final class StandardSecurityHandler extends SecurityHandler
                            dicLength, encryptMetadata) )
         {
             currentAccessPermission = new AccessPermission(dicPermissions);
+            currentAccessPermission.setReadOnly();
             setCurrentAccessPermission(currentAccessPermission);
             
             encryptionKey =
@@ -261,11 +270,8 @@ public final class StandardSecurityHandler extends SecurityHandler
             if (stdCryptFilterDictionary != null)
             {
                 COSName cryptFilterMethod = stdCryptFilterDictionary.getCryptFilterMethod();
-                if (cryptFilterMethod != null)
-                {
-                    setAES("AESV2".equalsIgnoreCase(cryptFilterMethod.getName())
-                            || "AESV3".equalsIgnoreCase(cryptFilterMethod.getName()));
-                }
+                setAES(COSName.AESV2.equals(cryptFilterMethod) || 
+                       COSName.AESV3.equals(cryptFilterMethod));
             }
         }
     }
@@ -288,26 +294,32 @@ public final class StandardSecurityHandler extends SecurityHandler
     }
 
     // Algorithm 13: validate permissions ("Perms" field). Relaxed to accomodate buggy encoders
+    // https://www.adobe.com/content/dam/Adobe/en/devnet/acrobat/pdfs/adobe_supplement_iso32000.pdf
     private void validatePerms(PDEncryption encryption, int dicPermissions, boolean encryptMetadata) throws IOException
     {
         try
         {
+            // "Decrypt the 16-byte Perms string using AES-256 in ECB mode with an 
+            // initialization vector of zero and the file encryption key as the key."
             Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(encryptionKey, "AES"));
             byte[] perms = cipher.doFinal(encryption.getPerms());
             
+            // "Verify that bytes 9-11 of the result are the characters ‘a’, ‘d’, ‘b’."
             if (perms[9] != 'a' || perms[10] != 'd' || perms[11] != 'b')
             {
                 LOG.warn("Verification of permissions failed (constant)");
             }
             
-            int permsP = perms[0] & 0xFF | perms[1] & 0xFF << 8 | perms[2] & 0xFF << 16 |
-                    perms[3] & 0xFF << 24;
+            // "Bytes 0-3 of the decrypted Perms entry, treated as a little-endian integer, 
+            // are the user permissions. They should match the value in the P key."
+            int permsP = perms[0] & 0xFF | (perms[1] & 0xFF) << 8 | (perms[2] & 0xFF) << 16 |
+                    (perms[3] & 0xFF) << 24;
             
             if (permsP != dicPermissions)
             {
-                LOG.warn("Verification of permissions failed (" + permsP +
-                        " != " + dicPermissions + ")");
+                LOG.warn("Verification of permissions failed (" + String.format("%08X",permsP) +
+                        " != " + String.format("%08X",dicPermissions) + ")");
             }
             
             if (encryptMetadata && perms[8] != 'T' || !encryptMetadata && perms[8] != 'F')
@@ -439,13 +451,7 @@ public final class StandardSecurityHandler extends SecurityHandler
             encryptionDictionary.setOwnerKey(o);
             encryptionDictionary.setOwnerEncryptionKey(oe);
 
-            PDCryptFilterDictionary cryptFilterDictionary = new PDCryptFilterDictionary();
-            cryptFilterDictionary.setCryptFilterMethod(COSName.AESV3);
-            cryptFilterDictionary.setLength(keyLength);
-            encryptionDictionary.setStdCryptFilterDictionary(cryptFilterDictionary);
-            encryptionDictionary.setStreamFilterName(COSName.STD_CF);
-            encryptionDictionary.setStringFilterName(COSName.STD_CF);
-            setAES(true);
+            prepareEncryptionDictAES(encryptionDictionary, COSName.AESV3);
 
             // Algorithm 10: compute "Perms" value
             byte[] perms = new byte[16];
@@ -521,6 +527,22 @@ public final class StandardSecurityHandler extends SecurityHandler
 
         encryptionDictionary.setOwnerKey(ownerBytes);
         encryptionDictionary.setUserKey(userBytes);
+        
+        if (revision == 4)
+        {
+            prepareEncryptionDictAES(encryptionDictionary, COSName.AESV2);
+        }
+    }
+
+    private void prepareEncryptionDictAES(PDEncryption encryptionDictionary, COSName aesVName)
+    {
+        PDCryptFilterDictionary cryptFilterDictionary = new PDCryptFilterDictionary();
+        cryptFilterDictionary.setCryptFilterMethod(aesVName);
+        cryptFilterDictionary.setLength(keyLength);
+        encryptionDictionary.setStdCryptFilterDictionary(cryptFilterDictionary);
+        encryptionDictionary.setStreamFilterName(COSName.STD_CF);
+        encryptionDictionary.setStringFilterName(COSName.STD_CF);
+        setAES(true);
     }
 
     /**

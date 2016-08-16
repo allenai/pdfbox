@@ -17,6 +17,7 @@
 package org.apache.pdfbox.pdmodel.interactive.form;
 
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Point2D;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -25,17 +26,18 @@ import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.pdfwriter.ContentStreamWriter;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
 import org.apache.pdfbox.pdmodel.interactive.action.PDFormFieldAdditionalActions;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceCharacteristicsDictionary;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceContentStream;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceEntry;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDBorderStyleDictionary;
+import org.apache.pdfbox.util.Matrix;
 
 /**
  * Create the AcroForms field appearance helper.
@@ -125,14 +127,28 @@ class AppearanceGeneratorHelper
                 else
                 {
                     appearanceStream = new PDAppearanceStream(field.getAcroForm().getDocument());
-                    appearanceStream.setBBox(widget.getRectangle().createRetranslatedRectangle());
+                    
+                    PDRectangle rect = widget.getRectangle();
+                    
+                    // Calculate the entries for the bounding box and the transformation matrix
+                    // settings for the appearance stream
+                    int rotation = resolveRotation(widget);
+                    Matrix matrix = Matrix.getRotateInstance(Math.toRadians(rotation), 0, 0);
+                    Point2D.Float point2D = matrix.transformPoint(rect.getWidth(), rect.getHeight());
+                    
+                    PDRectangle bbox = new PDRectangle(Math.abs((float) point2D.getX()), Math.abs((float) point2D.getY()));
+                    appearanceStream.setBBox(bbox);
+                    
+                    appearanceStream.setMatrix(calculateMatrix(bbox, rotation));
+                    appearanceStream.setFormType(1);
+
                     appearanceDict.setNormalAppearance(appearanceStream);
                     // TODO support appearances other than "normal"
                 }
                 
                 /*
                  * Adobe Acrobat always recreates the complete appearance stream if there is an appearance characteristics
-                 * entry (the widget dictionaries MK entry). In addition if there is no content yet also create the apperance
+                 * entry (the widget dictionaries MK entry). In addition if there is no content yet also create the appearance
                  * stream from the entries.
                  * 
                  */
@@ -146,6 +162,17 @@ class AppearanceGeneratorHelper
         }
     }
     
+    private int resolveRotation(PDAnnotationWidget widget)
+    {
+        PDAppearanceCharacteristicsDictionary  characteristicsDictionary = widget.getAppearanceCharacteristics();
+        if (characteristicsDictionary != null)
+        {
+            // 0 is the default value if the R key doesn't exist
+            return characteristicsDictionary.getRotation();
+        }
+        return 0;
+    }
+
     /**
      * Initialize the content of the appearance stream.
      * 
@@ -159,8 +186,7 @@ class AppearanceGeneratorHelper
     private void initializeAppearanceContent(PDAnnotationWidget widget, PDAppearanceStream appearanceStream) throws IOException
     {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        PDPageContentStream contents = new PDPageContentStream(field.getAcroForm().getDocument(),
-                appearanceStream, output);
+        PDAppearanceContentStream contents = new PDAppearanceContentStream(appearanceStream, output);
         PDAppearanceCharacteristicsDictionary appearanceCharacteristics = widget.getAppearanceCharacteristics();
         
         // TODO: support more entries like patterns, background color etc.
@@ -259,11 +285,9 @@ class AppearanceGeneratorHelper
                                            PDAppearanceStream appearanceStream,
                                            OutputStream output) throws IOException
     {
-        PDPageContentStream contents = new PDPageContentStream(field.getAcroForm().getDocument(),
-                                                               appearanceStream, output);
+        PDAppearanceContentStream contents = new PDAppearanceContentStream(appearanceStream, output);
         
-        appearanceStream.setMatrix(new AffineTransform());
-        appearanceStream.setFormType(1);
+        PDRectangle bbox = resolveBoundingBox(widget, appearanceStream);
         
         // Acrobat calculates the left and right padding dependent on the offset of the border edge
         // This calculation works for forms having been generated by Acrobat.
@@ -273,7 +297,6 @@ class AppearanceGeneratorHelper
         {
             borderWidth = widget.getBorderStyle().getWidth();
         }
-        PDRectangle bbox = resolveBoundingBox(widget, appearanceStream);
         PDRectangle clipRect = applyPadding(bbox, Math.max(1f, borderWidth));
         PDRectangle contentRect = applyPadding(clipRect, Math.max(1f, borderWidth));
         
@@ -378,6 +401,35 @@ class AppearanceGeneratorHelper
         contents.close();
     }
     
+    private AffineTransform calculateMatrix(PDRectangle bbox, int rotation)
+    {
+        if (rotation == 0)
+        {
+            return new AffineTransform();
+        }
+        else
+        {
+            float tx=0, ty=0;
+
+            if (rotation == 90)
+            {
+                tx = bbox.getUpperRightY();
+            }
+            else if (rotation == 180)
+            {
+                tx = bbox.getUpperRightY();
+                ty = bbox.getUpperRightX();
+            }
+            else if (rotation == 270)
+            {
+                ty = bbox.getUpperRightX();
+            }
+
+            Matrix matrix = Matrix.getRotateInstance(Math.toRadians(rotation), tx, ty);
+            return matrix.createAffineTransform();
+        }
+    }
+
     private boolean isMultiLine()
     {
         return field instanceof PDTextField && ((PDTextField) field).isMultiline();
@@ -413,7 +465,7 @@ class AppearanceGeneratorHelper
      * @param fontSize the font size to be used
      * @throws IOException
      */
-    private void insertGeneratedCombAppearance(PDPageContentStream contents, PDAppearanceStream appearanceStream,
+    private void insertGeneratedCombAppearance(PDAppearanceContentStream contents, PDAppearanceStream appearanceStream,
             PDFont font, float fontSize) throws IOException
     {
         
@@ -453,7 +505,7 @@ class AppearanceGeneratorHelper
         }
     }
     
-    private void insertGeneratedSelectionHighlight(PDPageContentStream contents, PDAppearanceStream appearanceStream,
+    private void insertGeneratedSelectionHighlight(PDAppearanceContentStream contents, PDAppearanceStream appearanceStream,
             PDFont font, float fontSize) throws IOException
     {
         List<Integer> indexEntries = ((PDListBox) field).getSelectedOptionsIndex();
@@ -497,7 +549,7 @@ class AppearanceGeneratorHelper
     }
     
     
-    private void insertGeneratedListboxAppearance(PDPageContentStream contents, PDAppearanceStream appearanceStream,
+    private void insertGeneratedListboxAppearance(PDAppearanceContentStream contents, PDAppearanceStream appearanceStream,
             PDRectangle contentRect, PDFont font, float fontSize) throws IOException
     {
         contents.setNonStrokingColor(0);
@@ -559,7 +611,7 @@ class AppearanceGeneratorHelper
      */
     private void writeToStream(byte[] data, PDAppearanceStream appearanceStream) throws IOException
     {
-        OutputStream out = appearanceStream.getCOSStream().createOutputStream();
+        OutputStream out = appearanceStream.getCOSObject().createOutputStream();
         out.write(data);
         out.close();
     }

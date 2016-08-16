@@ -57,17 +57,19 @@ public class COSFloat extends COSNumber
         {
             valueAsString = aFloat; 
             value = new BigDecimal( valueAsString );
+            checkMinMaxValues();
         }
         catch( NumberFormatException e )
         {
-            if (aFloat.startsWith("0.00000-"))
+            if (aFloat.matches("^0\\.0+\\-\\d+"))
             {
                 // PDFBOX-2990 has 0.00000-33917698
-                // Let's wait what other floats will be coming before doing a more general workaround.
+                // PDFBOX-3369 has 0.00-35095424
                 try
                 {
-                    valueAsString = "-0.00000" + aFloat.substring(8);
+                    valueAsString = "-" + valueAsString.replaceFirst("\\-", "");
                     value = new BigDecimal(valueAsString);
+                    checkMinMaxValues();
                 }
                 catch (NumberFormatException e2)
                 {
@@ -80,7 +82,39 @@ public class COSFloat extends COSNumber
             }
         }
     }
-
+    
+    private void checkMinMaxValues()
+    {
+        float floatValue = value.floatValue();
+        double doubleValue = value.doubleValue();
+        boolean valueReplaced = false;
+        // check for huge values
+        if (floatValue == Float.NEGATIVE_INFINITY  || floatValue == Float.POSITIVE_INFINITY )
+        {
+            
+            if (Math.abs(doubleValue) > Float.MAX_VALUE)
+            {
+                floatValue = Float.MAX_VALUE * (floatValue == Float.POSITIVE_INFINITY ? 1 : -1);
+                valueReplaced = true;
+            }
+        }
+        // check for very small values
+        else if (floatValue == 0 && doubleValue != 0)
+        {
+            if (Math.abs(doubleValue) < Float.MIN_NORMAL )
+            {
+                floatValue = Float.MIN_NORMAL;
+                floatValue *= doubleValue >= 0  ? 1 : -1;
+                valueReplaced = true;
+            }
+        }
+        if (valueReplaced)
+        {
+            value = new BigDecimal(floatValue);
+            valueAsString = removeNullDigits(value.toPlainString());
+        }
+    }
+    
     private String removeNullDigits(String plainStringValue)
     {
         // remove fraction digit "0" only

@@ -180,16 +180,16 @@ public class FDFField implements COSObjectable
      *
      * @param kids A list of FDFField objects.
      */
-    public void setKids(List<FDFField> kids)
+    public final void setKids(List<FDFField> kids)
     {
         field.setItem(COSName.KIDS, COSArrayList.converterToCOSArray(kids));
     }
 
     /**
      * This will get the "T" entry in the field dictionary. A partial field name. Where the fully qualified field name
-     * is a concatenation of the parent's fully qualified field name and "." as a separator. For example<br/>
-     * Address.State<br />
-     * Address.City<br />
+     * is a concatenation of the parent's fully qualified field name and "." as a separator. For example<br>
+     * Address.State<br>
+     * Address.City<br>
      *
      * @return The partial field name.
      */
@@ -209,8 +209,8 @@ public class FDFField implements COSObjectable
     }
 
     /**
-     * This will get the value for the field. This will return type will either be <br />
-     * String : Checkboxes, Radio Button <br />
+     * This will get the value for the field. This will return type will either be <br>
+     * String : Checkboxes, Radio Button <br>
      * java.util.List of strings: Choice Field PDTextStream: Textfields
      *
      * @return The value of the field.

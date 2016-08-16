@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
 import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
@@ -30,8 +29,7 @@ import java.security.MessageDigest;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
-import org.apache.pdfbox.cos.COSArray;
-import org.apache.pdfbox.cos.COSDictionary;
+import java.util.List;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSString;
 
@@ -40,6 +38,7 @@ import org.apache.pdfbox.examples.signature.CreateVisibleSignature;
 import org.apache.pdfbox.examples.signature.TSAClient;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
 import org.apache.wink.client.MockHttpServer;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -47,6 +46,7 @@ import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInformation;
+import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.tsp.TSPValidationException;
 import org.bouncycastle.util.Store;
@@ -79,6 +79,8 @@ public class TestCreateSignature extends TestCase
      *
      * @throws IOException
      * @throws GeneralSecurityException
+     * @throws CMSException
+     * @throws OperatorCreationException
      */
     public void testDetachedSHA256()
             throws IOException, CMSException, OperatorCreationException, GeneralSecurityException
@@ -105,6 +107,8 @@ public class TestCreateSignature extends TestCase
      *
      * @throws IOException
      * @throws GeneralSecurityException
+     * @throws CMSException
+     * @throws OperatorCreationException
      */
     public void testDetachedSHA256WithTSA()
             throws IOException, CMSException, OperatorCreationException, GeneralSecurityException
@@ -153,6 +157,8 @@ public class TestCreateSignature extends TestCase
      * Test creating visual signature.
      *
      * @throws IOException
+     * @throws CMSException
+     * @throws OperatorCreationException
      * @throws GeneralSecurityException
      */
     public void testCreateVisibleSignature()
@@ -166,75 +172,52 @@ public class TestCreateSignature extends TestCase
         String inPath = inDir + "sign_me.pdf";
         FileInputStream fis = new FileInputStream(jpegPath);
         CreateVisibleSignature signing = new CreateVisibleSignature(keystore, password.toCharArray());
-        signing.setVisibleSignatureProperties(inPath, 0, 0, -50, fis, 1);
-        signing.setSignatureProperties("name", "location", "Security", 0, 1, true);
+        signing.setvisibleSignDesigner(inPath, 0, 0, -50, fis, 1);
+        signing.setVisibleSignatureProperties("name", "location", "Security", 0, 1, true);
         File destFile = new File(outDir + "signed_visible.pdf");
-        signing.signPDF(new File(inPath), destFile);
+        signing.signPDF(new File(inPath), destFile, null);
+        fis.close();
 
         checkSignature(destFile);
     }
 
-    //TODO expand this into a full verify (if possible)
     // This check fails with a file created with the code before PDFBOX-3011 was solved.
     private void checkSignature(File file)
             throws IOException, CMSException, OperatorCreationException, GeneralSecurityException
     {
         PDDocument document = PDDocument.load(file);
-        COSDictionary trailer = document.getDocument().getTrailer();
-        COSDictionary root = (COSDictionary) trailer.getDictionaryObject(COSName.ROOT);
-        COSDictionary acroForm = (COSDictionary) root.getDictionaryObject(COSName.ACRO_FORM);
-        COSArray fields = (COSArray) acroForm.getDictionaryObject(COSName.FIELDS);
-        COSDictionary sig = null;
-        for (int i = 0; i < fields.size(); i++)
-        {
-            COSDictionary field = (COSDictionary) fields.getObject(i);
-            if (COSName.SIG.equals(field.getCOSName(COSName.FT)))
-            {
-                sig = (COSDictionary) field.getDictionaryObject(COSName.V);
-
-                COSString contents = (COSString) sig.getDictionaryObject(COSName.CONTENTS);
-                COSArray byteRange = (COSArray) sig.getDictionaryObject(COSName.BYTERANGE);
-                
-                RandomAccessFile raf = new RandomAccessFile(file, "r");
-                
-                byte[] buf = new byte[byteRange.getInt(1) + byteRange.getInt(3)];
-                raf.seek(byteRange.getInt(0));
-                raf.readFully(buf, 0, byteRange.getInt(1));
-                raf.seek(byteRange.getInt(2));
-                raf.readFully(buf, byteRange.getInt(1), byteRange.getInt(3));
-                raf.close();
-                
-                // inspiration:
-                // http://stackoverflow.com/a/26702631/535646
-                // http://stackoverflow.com/a/9261365/535646
-                CMSSignedData signedData = new CMSSignedData(new CMSProcessableByteArray(buf), contents.getBytes());
-                Store certificatesStore = signedData.getCertificates();
-                Collection<SignerInformation> signers = signedData.getSignerInfos().getSigners();
-                SignerInformation signerInformation = signers.iterator().next();
-
-                Collection matches = certificatesStore.getMatches(signerInformation.getSID());
-                X509CertificateHolder certificateHolder = (X509CertificateHolder) matches.iterator().next();
-                X509Certificate certFromSignedData = new JcaX509CertificateConverter().getCertificate(certificateHolder);
-                
-                assertEquals(certificate, certFromSignedData);
-
-                // code below doesn't work - maybe because the signature can indeed not be verified?
-                
-//                if (signerInformation.verify(new JcaSimpleSignerInfoVerifierBuilder().build(certFromSignedData)))
-//                {
-//                    System.out.println("Signature verified");
-//                }
-//                else
-//                {
-//                    System.out.println("Signature verification failed");
-//                }
-
-                break;
-            }
-        }
-        if (sig == null)
+        List<PDSignature> signatureDictionaries = document.getSignatureDictionaries();
+        if (signatureDictionaries.isEmpty())
         {
             fail("no signature found");
+        }
+        for (PDSignature sig : document.getSignatureDictionaries())
+        {
+            COSString contents = (COSString) sig.getCOSObject().getDictionaryObject(COSName.CONTENTS);
+            
+            FileInputStream fis = new FileInputStream(file);
+            byte[] buf = sig.getSignedContent(fis);
+            fis.close();
+
+            // inspiration:
+            // http://stackoverflow.com/a/26702631/535646
+            // http://stackoverflow.com/a/9261365/535646
+            CMSSignedData signedData = new CMSSignedData(new CMSProcessableByteArray(buf), contents.getBytes());
+            Store certificatesStore = signedData.getCertificates();
+            Collection<SignerInformation> signers = signedData.getSignerInfos().getSigners();
+            SignerInformation signerInformation = signers.iterator().next();
+            Collection matches = certificatesStore.getMatches(signerInformation.getSID());
+            X509CertificateHolder certificateHolder = (X509CertificateHolder) matches.iterator().next();
+            X509Certificate certFromSignedData = new JcaX509CertificateConverter().getCertificate(certificateHolder);
+
+            assertEquals(certificate, certFromSignedData);
+
+            // CMSVerifierCertificateNotValidException means that the keystore wasn't valid at signing time
+            if (!signerInformation.verify(new JcaSimpleSignerInfoVerifierBuilder().build(certFromSignedData)))
+            {
+                fail("Signature verification failed");
+            }
+            break;
         }
         document.close();
     }

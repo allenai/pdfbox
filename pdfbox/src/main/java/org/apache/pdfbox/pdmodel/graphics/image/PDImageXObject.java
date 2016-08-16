@@ -21,6 +21,7 @@ import java.awt.Paint;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -44,6 +45,8 @@ import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
+import org.apache.pdfbox.util.filetypedetector.FileType;
+import org.apache.pdfbox.util.filetypedetector.FileTypeDetector;
 
 /**
  * An Image XObject.
@@ -101,7 +104,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
             PDColorSpace initColorSpace) throws IOException
     {
         super(createRawStream(document, encodedStream), COSName.IMAGE);
-        getCOSStream().setItem(COSName.FILTER, cosFilter);
+        getCOSObject().setItem(COSName.FILTER, cosFilter);
         resources = null;
         colorSpace = null;
         setBitsPerComponent(bitsPerComponent);
@@ -145,7 +148,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
     }
     
     /**
-     * Create a PDImageXObject from an image file, see {@link #createFromFile(File, PDDocument)} for
+     * Create a PDImageXObject from an image file, see {@link #createFromFileByExtension(File, PDDocument)} for
      * more details.
      *
      * @param imagePath the image file path.
@@ -156,7 +159,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
      */
     public static PDImageXObject createFromFile(String imagePath, PDDocument doc) throws IOException
     {
-        return createFromFile(new File(imagePath), doc);
+        return createFromFileByExtension(new File(imagePath), doc);
     }
 
     /**
@@ -174,18 +177,21 @@ public final class PDImageXObject extends PDXObject implements PDImage
      * PDImageXObject.
      * @throws IllegalArgumentException if the image type is not supported.
      */
-    public static PDImageXObject createFromFile(File file, PDDocument doc) throws IOException
+    public static PDImageXObject createFromFileByExtension(File file, PDDocument doc) throws IOException
     {
         String name = file.getName();
         int dot = file.getName().lastIndexOf('.');
         if (dot == -1)
         {
-            throw new IOException("Image type not supported: " + name);
+            throw new IllegalArgumentException("Image type not supported: " + name);
         }
         String ext = name.substring(dot + 1).toLowerCase();
         if ("jpg".equals(ext) || "jpeg".equals(ext))
         {
-            return JPEGFactory.createFromStream(doc, new FileInputStream(file));
+            FileInputStream fis = new FileInputStream(file);
+            PDImageXObject imageXObject = JPEGFactory.createFromStream(doc, fis);
+            fis.close();
+            return imageXObject;
         }
         if ("tif".equals(ext) || "tiff".equals(ext))
         {
@@ -196,7 +202,66 @@ public final class PDImageXObject extends PDXObject implements PDImage
             BufferedImage bim = ImageIO.read(file);
             return LosslessFactory.createFromImage(doc, bim);
         }
-        throw new IOException("Image type not supported: " + name);
+        throw new IllegalArgumentException("Image type not supported: " + name);
+    }
+
+    /**
+     * Create a PDImageXObject from an image file. The file format is determined by the file
+     * content. The following file types are supported: jpg, jpeg, tif, tiff, gif, bmp and png. This
+     * is a convenience method that calls {@link JPEGFactory#createFromStream},
+     * {@link CCITTFactory#createFromFile} or {@link ImageIO#read} combined with
+     * {@link LosslessFactory#createFromImage}. (The later can also be used to create a
+     * PDImageXObject from a BufferedImage).
+     *
+     * @param file the image file.
+     * @param doc the document that shall use this PDImageXObject.
+     * @return a PDImageXObject.
+     * @throws IOException if there is an error when reading the file or creating the
+     * PDImageXObject.
+     * @throws IllegalArgumentException if the image type is not supported.
+     */
+    public static PDImageXObject createFromFileByContent(File file, PDDocument doc) throws IOException
+    {
+        FileInputStream fileInputStream = null;
+        BufferedInputStream bufferedInputStream = null;
+        FileType fileType = null;
+        try
+        {
+            fileInputStream = new FileInputStream(file);
+            bufferedInputStream = new BufferedInputStream(fileInputStream);
+            fileType = FileTypeDetector.detectFileType(bufferedInputStream);
+        }
+        catch (IOException e)
+        {
+            throw new IOException("Could not determine file type: " + file.getName(), e);
+        }
+        finally
+        {
+            IOUtils.closeQuietly(fileInputStream);
+            IOUtils.closeQuietly(bufferedInputStream);
+        }
+        if (fileType == null)
+        {
+            throw new IllegalArgumentException("Image type not supported: " + file.getName());
+        }
+
+        if (fileType.equals(FileType.JPEG))
+        {
+            FileInputStream fis = new FileInputStream(file);
+            PDImageXObject imageXObject = JPEGFactory.createFromStream(doc, fis);
+            fis.close();
+            return imageXObject;
+        }
+        if (fileType.equals(FileType.TIFF))
+        {
+            return CCITTFactory.createFromFile(doc, file);
+        }
+        if (fileType.equals(FileType.BMP) || fileType.equals(FileType.GIF) || fileType.equals(FileType.PNG))
+        {
+            BufferedImage bim = ImageIO.read(file);
+            return LosslessFactory.createFromImage(doc, bim);
+        }
+        throw new IllegalArgumentException("Image type not supported: " + file.getName());
     }
 
     // repairs parameters using decode result
@@ -210,7 +275,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
     // repairs parameters using decode result
     private static PDStream repair(PDStream stream, COSInputStream input)
     {
-        stream.getStream().addAll(input.getDecodeResult().getParameters());
+        stream.getCOSObject().addAll(input.getDecodeResult().getParameters());
         return stream;
     }
 
@@ -220,7 +285,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
      */
     public PDMetadata getMetadata()
     {
-        COSStream cosStream = (COSStream) getCOSStream().getDictionaryObject(COSName.METADATA);
+        COSStream cosStream = (COSStream) getCOSObject().getDictionaryObject(COSName.METADATA);
         if (cosStream != null)
         {
             return new PDMetadata(cosStream);
@@ -234,7 +299,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
      */
     public void setMetadata(PDMetadata meta)
     {
-        getCOSStream().setItem(COSName.METADATA, meta);
+        getCOSObject().setItem(COSName.METADATA, meta);
     }
 
     /**
@@ -243,7 +308,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
      */
     public int getStructParent()
     {
-        return getCOSStream().getInt(COSName.STRUCT_PARENT, 0);
+        return getCOSObject().getInt(COSName.STRUCT_PARENT, 0);
     }
 
     /**
@@ -252,7 +317,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
      */
     public void setStructParent(int key)
     {
-        getCOSStream().setInt(COSName.STRUCT_PARENT, key);
+        getCOSObject().setInt(COSName.STRUCT_PARENT, key);
     }
 
     /**
@@ -399,10 +464,11 @@ public final class PDImageXObject extends PDXObject implements PDImage
     /**
      * Returns the Mask Image XObject associated with this image, or null if there is none.
      * @return Mask Image XObject
+     * @throws java.io.IOException
      */
     public PDImageXObject getMask() throws IOException
     {
-        COSBase mask = getCOSStream().getDictionaryObject(COSName.MASK);
+        COSBase mask = getCOSObject().getDictionaryObject(COSName.MASK);
         if (mask instanceof COSArray)
         {
             // color key mask, no explicit mask to return
@@ -410,7 +476,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
         }
         else
         {
-            COSStream cosStream = (COSStream)getCOSStream().getDictionaryObject(COSName.MASK);
+            COSStream cosStream = (COSStream) getCOSObject().getDictionaryObject(COSName.MASK);
             if (cosStream != null)
             {
                 // always DeviceGray
@@ -426,7 +492,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
      */
     public COSArray getColorKeyMask()
     {
-        COSBase mask = getCOSStream().getDictionaryObject(COSName.MASK);
+        COSBase mask = getCOSObject().getDictionaryObject(COSName.MASK);
         if (mask instanceof COSArray)
         {
             return (COSArray)mask;
@@ -437,10 +503,11 @@ public final class PDImageXObject extends PDXObject implements PDImage
     /**
      * Returns the Soft Mask Image XObject associated with this image, or null if there is none.
      * @return the SMask Image XObject, or null.
+     * @throws java.io.IOException
      */
     public PDImageXObject getSoftMask() throws IOException
     {
-        COSStream cosStream = (COSStream)getCOSStream().getDictionaryObject(COSName.SMASK);
+        COSStream cosStream = (COSStream) getCOSObject().getDictionaryObject(COSName.SMASK);
         if (cosStream != null)
         {
             // always DeviceGray
@@ -458,14 +525,14 @@ public final class PDImageXObject extends PDXObject implements PDImage
         }
         else
         {
-            return getCOSStream().getInt(COSName.BITS_PER_COMPONENT, COSName.BPC);
+            return getCOSObject().getInt(COSName.BITS_PER_COMPONENT, COSName.BPC);
         }
     }
 
     @Override
     public void setBitsPerComponent(int bpc)
     {
-        getCOSStream().setInt(COSName.BITS_PER_COMPONENT, bpc);
+        getCOSObject().setInt(COSName.BITS_PER_COMPONENT, bpc);
     }
 
     @Override
@@ -473,7 +540,7 @@ public final class PDImageXObject extends PDXObject implements PDImage
     {
         if (colorSpace == null)
         {
-            COSBase cosBase = getCOSStream().getDictionaryObject(COSName.COLORSPACE, COSName.CS);
+            COSBase cosBase = getCOSObject().getDictionaryObject(COSName.COLORSPACE, COSName.CS);
             if (cosBase != null)
             {
                 colorSpace = PDColorSpace.create(cosBase, resources);
@@ -501,67 +568,67 @@ public final class PDImageXObject extends PDXObject implements PDImage
     @Override
     public InputStream createInputStream(List<String> stopFilters) throws IOException
     {
-        return createInputStream();
+        return getStream().createInputStream(stopFilters);
     }
 
     @Override
     public boolean isEmpty()
     {
-        return getStream().getStream().getLength() == 0;
+        return getStream().getCOSObject().getLength() == 0;
     }
 
     @Override
     public void setColorSpace(PDColorSpace cs)
     {
-        getCOSStream().setItem(COSName.COLORSPACE, cs != null ? cs.getCOSObject() : null);
+        getCOSObject().setItem(COSName.COLORSPACE, cs != null ? cs.getCOSObject() : null);
     }
 
     @Override
     public int getHeight()
     {
-        return getCOSStream().getInt(COSName.HEIGHT);
+        return getCOSObject().getInt(COSName.HEIGHT);
     }
 
     @Override
     public void setHeight(int h)
     {
-        getCOSStream().setInt(COSName.HEIGHT, h);
+        getCOSObject().setInt(COSName.HEIGHT, h);
     }
 
     @Override
     public int getWidth()
     {
-        return getCOSStream().getInt(COSName.WIDTH);
+        return getCOSObject().getInt(COSName.WIDTH);
     }
 
     @Override
     public void setWidth(int w)
     {
-        getCOSStream().setInt(COSName.WIDTH, w);
+        getCOSObject().setInt(COSName.WIDTH, w);
     }
 
     @Override
     public boolean getInterpolate()
     {
-        return getCOSStream().getBoolean(COSName.INTERPOLATE, false);
+        return getCOSObject().getBoolean(COSName.INTERPOLATE, false);
     }
 
     @Override
     public void setInterpolate(boolean value)
     {
-        getCOSStream().setBoolean(COSName.INTERPOLATE, value);
+        getCOSObject().setBoolean(COSName.INTERPOLATE, value);
     }
 
     @Override
     public void setDecode(COSArray decode)
     {
-        getCOSStream().setItem(COSName.DECODE, decode);
+        getCOSObject().setItem(COSName.DECODE, decode);
     }
 
     @Override
     public COSArray getDecode()
     {
-        COSBase decode = getCOSStream().getDictionaryObject(COSName.DECODE);
+        COSBase decode = getCOSObject().getDictionaryObject(COSName.DECODE);
         if (decode instanceof COSArray)
         {
             return (COSArray) decode;
@@ -572,13 +639,13 @@ public final class PDImageXObject extends PDXObject implements PDImage
     @Override
     public boolean isStencil()
     {
-        return getCOSStream().getBoolean(COSName.IMAGE_MASK, false);
+        return getCOSObject().getBoolean(COSName.IMAGE_MASK, false);
     }
 
     @Override
     public void setStencil(boolean isStencil)
     {
-        getCOSStream().setBoolean(COSName.IMAGE_MASK, isStencil);
+        getCOSObject().setBoolean(COSName.IMAGE_MASK, isStencil);
     }
 
     /**

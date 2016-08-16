@@ -51,10 +51,15 @@ class PlainText
      */
     PlainText(String textValue)
     {
-        List<String> parts = Arrays.asList(textValue.split("\\n"));
+        List<String> parts = Arrays.asList(textValue.split("\\r\\n|\\n|\\r|\\u2028|\\u2029"));
         paragraphs = new ArrayList<Paragraph>();
         for (String part : parts)
         {
+        	// Acrobat prints a space for an empty paragraph
+        	if (part.length() == 0)
+        	{
+        		part = " ";
+        	}
             paragraphs.add(new Paragraph(part));
         }
     }

@@ -78,6 +78,12 @@ public class DomXmpParser
         try
         {
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+            dbFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            dbFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            dbFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            dbFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            dbFactory.setXIncludeAware(false);
+            dbFactory.setExpandEntityReferences(false);
             dbFactory.setNamespaceAware(true);
             dBuilder = dbFactory.newDocumentBuilder();
             nsFinder = new NamespaceFinder();
@@ -86,7 +92,6 @@ public class DomXmpParser
         {
             throw new XmpParsingException(ErrorType.Configuration, "Failed to initilalize", e);
         }
-
     }
 
     public boolean isStrictParsing()
@@ -456,7 +461,7 @@ public class DomXmpParser
         for (Element element : lis)
         {
             QName propertyQName = new QName(element.getLocalName());
-            AbstractField ast = parseLiElement(xmp, propertyQName, element);
+            AbstractField ast = parseLiElement(xmp, propertyQName, element, type.type());
             if (ast != null)
             {
                 array.addProperty(ast);
@@ -493,7 +498,7 @@ public class DomXmpParser
         }
     }
 
-    private AbstractField parseLiElement(XMPMetadata xmp, QName descriptor, Element liElement)
+    private AbstractField parseLiElement(XMPMetadata xmp, QName descriptor, Element liElement, Types type)
             throws XmpParsingException
     {
         if (DomHelper.isParseTypeResource(liElement))
@@ -509,11 +514,11 @@ public class DomXmpParser
         }
         else
         {
-            // no child, so consider as simple text
+            // no child
             String text = liElement.getTextContent();
             TypeMapping tm = xmp.getTypeMapping();
             AbstractSimpleProperty sp = tm.instanciateSimpleProperty(descriptor.getNamespaceURI(),
-                    descriptor.getPrefix(), descriptor.getLocalPart(), text, Types.Text);
+                    descriptor.getPrefix(), descriptor.getLocalPart(), text, type);
             loadAttributes(sp, liElement);
             return sp;
         }
@@ -594,7 +599,7 @@ public class DomXmpParser
                 List<Element> lis = DomHelper.getElementChildren(bagOrSeq);
                 for (Element element2 : lis)
                 {
-                    AbstractField ast2 = parseLiElement(xmp, descriptor, element2);
+                    AbstractField ast2 = parseLiElement(xmp, descriptor, element2, type.type());
                     if (ast2 != null)
                     {
                         array.addProperty(ast2);
@@ -658,16 +663,21 @@ public class DomXmpParser
             if (!token.endsWith("\"") && !token.endsWith("\'"))
             {
                 throw new XmpParsingException(ErrorType.XpacketBadStart, "Cannot understand PI data part : '" + token
-                        + "'");
+                        + "' in '" + data + "'");
             }
             String quote = token.substring(token.length() - 1);
             int pos = token.indexOf("=" + quote);
             if (pos <= 0)
             {
                 throw new XmpParsingException(ErrorType.XpacketBadStart, "Cannot understand PI data part : '" + token
-                        + "'");
+                        + "' in '" + data + "'");
             }
             String name = token.substring(0, pos);
+            if (token.length() - 1 < pos + 2)
+            {
+                throw new XmpParsingException(ErrorType.XpacketBadStart, "Cannot understand PI data part : '" + token
+                        + "' in '" + data + "'");
+            }
             String value = token.substring(pos + 2, token.length() - 1);
             if ("id".equals(name))
             {
@@ -854,7 +864,7 @@ public class DomXmpParser
         }
         catch (BadFieldValueException e)
         {
-            throw new XmpParsingException(ErrorType.InvalidType, "Failed to retreive property definition", e);
+            throw new XmpParsingException(ErrorType.InvalidType, "Failed to retrieve property definition", e);
         }
     }
 

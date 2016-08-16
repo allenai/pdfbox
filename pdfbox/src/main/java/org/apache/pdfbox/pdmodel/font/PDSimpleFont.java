@@ -18,7 +18,6 @@ package org.apache.pdfbox.pdmodel.font;
 
 import java.awt.geom.GeneralPath;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -48,8 +47,7 @@ public abstract class PDSimpleFont extends PDFont
     protected GlyphList glyphList;
     private Boolean isSymbolic;
     private final Set<Integer> noUnicode = new HashSet<Integer>(); // for logging
-    private Map<String, Integer> invertedEncoding; // for writing
-    
+
     /**
      * Constructor for embedding.
      */
@@ -64,8 +62,6 @@ public abstract class PDSimpleFont extends PDFont
     PDSimpleFont(String baseFont)
     {
         super(baseFont);
-
-        this.encoding = WinAnsiEncoding.INSTANCE;
 
         // assign the glyph list based on the font
         if ("ZapfDingbats".equals(baseFont))
@@ -115,7 +111,13 @@ public abstract class PDSimpleFont extends PDFont
                 Encoding builtIn = null;
                 Boolean symbolic = getSymbolicFlag();
                 boolean isFlaggedAsSymbolic = symbolic != null && symbolic;
-                if (!encodingDict.containsKey(COSName.BASE_ENCODING) && isFlaggedAsSymbolic)
+
+                COSName baseEncoding = encodingDict.getCOSName(COSName.BASE_ENCODING);
+                
+                boolean hasValidBaseEncoding = baseEncoding != null &&
+                            Encoding.getInstance(baseEncoding) != null;
+                
+                if (!hasValidBaseEncoding && isFlaggedAsSymbolic)
                 {
                     builtIn = readEncodingFromFont();
                 }
@@ -146,7 +148,7 @@ public abstract class PDSimpleFont extends PDFont
             glyphList = GlyphList.getAdobeGlyphList();
         }
     }
-
+    
     /**
      * Called by readEncoding() if the encoding needs to be extracted from the font file.
      *
@@ -168,28 +170,6 @@ public abstract class PDSimpleFont extends PDFont
     public GlyphList getGlyphList()
     {
         return glyphList;
-    }
-
-    /**
-     * Inverts the font's Encoding. Any duplicate (Name -> Code) mappings will be lost.
-     */
-    protected Map<String, Integer> getInvertedEncoding()
-    {
-        if (invertedEncoding != null)
-        {
-            return invertedEncoding;
-        }
-
-        invertedEncoding = new HashMap<String, Integer>();
-        Map<Integer, String> codeToName = encoding.getCodeToNameMap();
-        for (Map.Entry<Integer, String> entry : codeToName.entrySet())
-        {
-            if (!invertedEncoding.containsKey(entry.getValue()))
-            {
-                invertedEncoding.put(entry.getValue(), entry.getKey());
-            }
-        }
-        return invertedEncoding;
     }
     
     /**

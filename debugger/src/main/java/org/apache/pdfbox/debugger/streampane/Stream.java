@@ -39,12 +39,14 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
  */
 public class Stream
 {
-    public static final String UNFILTERED = "Unfiltered";
+    public static final String DECODED = "Decoded (Plain Text)";
     public static final String IMAGE = "Image";
 
     private final COSStream stream;
     private final boolean isThumb;
     private final boolean isImage;
+    private final boolean isXmlMetadata;
+    
     private final Map<String, List<String>> filters;
 
     /**
@@ -58,6 +60,7 @@ public class Stream
         this.stream = cosStream;
         this.isThumb = isThumb;
         this.isImage = isImageStream(cosStream, isThumb);
+        this.isXmlMetadata = isXmlMetadataStream(cosStream);
 
         filters = createFilterList(cosStream);
     }
@@ -70,6 +73,16 @@ public class Stream
     public boolean isImage()
     {
         return isImage;
+    }
+    
+    /**
+     * Return if this is stream is an Metadata stream.
+     *
+     * @return true if this a metadata stream and false otherwise.
+     */
+    public boolean isXmlMetadata()
+    {
+        return isXmlMetadata;
     }
 
     /**
@@ -111,7 +124,7 @@ public class Stream
                 sb.append(((COSName) filterArray.get(i)).getName());
             }
         }
-        return "Filtered (" + sb.toString() + ")";
+        return "Encoded (" + sb.toString() + ")";
     }
 
     /**
@@ -124,7 +137,7 @@ public class Stream
     {
         try
         {
-            if (UNFILTERED.equals(key))
+            if (DECODED.equals(key))
             {
                 return stream.createInputStream();
             }
@@ -181,7 +194,7 @@ public class Stream
             filterList.put(IMAGE, null);
         }
 
-        filterList.put(UNFILTERED, null);
+        filterList.put(DECODED, null);
         PDStream pdStream = new PDStream(stream);
 
         if (pdStream.getFilters() != null)
@@ -228,5 +241,10 @@ public class Stream
             return true;
         }
         return dic.containsKey(COSName.SUBTYPE) && dic.getCOSName(COSName.SUBTYPE).equals(COSName.IMAGE);
+    }
+    
+    private boolean isXmlMetadataStream(COSDictionary dic)
+    {
+        return dic.containsKey(COSName.SUBTYPE) && dic.getCOSName(COSName.SUBTYPE).equals(COSName.getPDFName("XML"));
     }
 }

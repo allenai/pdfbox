@@ -16,6 +16,7 @@
  */
 package org.apache.pdfbox.pdmodel.font;
 
+import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
 import java.io.File;
 import java.io.FileInputStream;
@@ -62,7 +63,7 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
     private static final int START_RANGE_F100 = 0xF100;
     private static final int START_RANGE_F200 = 0xF200;
 
-    private static final Map<String, Integer> INVERTED_MACOS_ROMAN = new HashMap<String, Integer>();
+    private static final Map<String, Integer> INVERTED_MACOS_ROMAN = new HashMap<String, Integer>(250);
     static
     {
         Map<Integer, String> codeToName = MacOSRomanEncoding.INSTANCE.getCodeToNameMap();
@@ -75,83 +76,15 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
         }
     }
 
-    /**
-     * Loads a TTF to be embedded into a document as a simple font.
-     * 
-     * <p><b>Note:</b> Simple fonts only support 256 characters. For Unicode support, use
-     * {@link PDType0Font#load(PDDocument, File)} instead.</p>
-     *
-     * @param doc The PDF document that will hold the embedded font.
-     * @param file A TTF file.
-     * @param encoding The PostScript encoding vector to be used for embedding.
-     * @return a PDTrueTypeFont instance.
-     * @throws IOException If there is an error loading the data.
-     */
-    public static PDTrueTypeFont load(PDDocument doc, File file, Encoding encoding)
-            throws IOException
-    {
-        return new PDTrueTypeFont(doc, new FileInputStream(file), encoding);
-    }
-
-    /**
-     * Loads a TTF to be embedded into a document as a simple font.
-     *
-     * <p><b>Note:</b> Simple fonts only support 256 characters. For Unicode support, use
-     * {@link PDType0Font#load(PDDocument, InputStream)} instead.</p>
-     * 
-     * @param doc The PDF document that will hold the embedded font.
-     * @param input A TTF file stream
-     * @param encoding The PostScript encoding vector to be used for embedding.
-     * @return a PDTrueTypeFont instance.
-     * @throws IOException If there is an error loading the data.
-     */
-    public static PDTrueTypeFont load(PDDocument doc, InputStream input, Encoding encoding)
-            throws IOException
-    {
-        return new PDTrueTypeFont(doc, input, encoding);
-    }
-    
-    /**
-     * Loads a TTF to be embedded into a document as a simple font. Only supports WinAnsiEncoding.
-     *
-     * @param doc The PDF document that will hold the embedded font.
-     * @param file A TTF file.
-     * @return a PDTrueTypeFont instance.
-     * @throws IOException If there is an error loading the data.
-     *
-     * @deprecated Use {@link PDType0Font#load(PDDocument, File)} instead.
-     */
-    @Deprecated
-    public static PDTrueTypeFont loadTTF(PDDocument doc, File file) throws IOException
-    {
-        return new PDTrueTypeFont(doc, new FileInputStream(file), WinAnsiEncoding.INSTANCE);
-    }
-
-    /**
-     * Loads a TTF to be embedded into a document as a simple font. Only supports WinAnsiEncoding.
-     *
-     * @param doc The PDF document that will hold the embedded font.
-     * @param input A TTF file stream
-     * @return a PDTrueTypeFont instance.
-     * @throws IOException If there is an error loading the data.
-     *
-     * @deprecated Use {@link PDType0Font#load(PDDocument, InputStream)} instead.
-     */
-    @Deprecated
-    public static PDTrueTypeFont loadTTF(PDDocument doc, InputStream input) throws IOException
-    {
-        return new PDTrueTypeFont(doc, input, WinAnsiEncoding.INSTANCE);
-    }
-
+    private final TrueTypeFont ttf;
+    private final boolean isEmbedded;
+    private final boolean isDamaged;
     private CmapSubtable cmapWinUnicode = null;
     private CmapSubtable cmapWinSymbol = null;
     private CmapSubtable cmapMacRoman = null;
     private boolean cmapInitialized = false;
     private Map<Integer, Integer> gidToCode; // for embedding
-
-    private final TrueTypeFont ttf;
-    private final boolean isEmbedded;
-    private final boolean isDamaged;
+    private BoundingBox fontBBox;
 
     /**
      * Creates a new TrueType font from a Font dictionary.
@@ -206,6 +139,89 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
         }
         ttf = ttfFont;
         readEncoding();
+    }
+    /**
+     * Creates a new TrueType font for embedding.
+     */
+    private PDTrueTypeFont(PDDocument document, InputStream ttfStream, Encoding encoding)
+            throws IOException
+    {
+        PDTrueTypeFontEmbedder embedder = new PDTrueTypeFontEmbedder(document, dict, ttfStream,
+                                                                     encoding);
+        this.encoding = encoding;
+        ttf = embedder.getTrueTypeFont();
+        setFontDescriptor(embedder.getFontDescriptor());
+        isEmbedded = true;
+        isDamaged = false;
+        glyphList = GlyphList.getAdobeGlyphList();
+    }
+
+    /**
+     * Loads a TTF to be embedded into a document as a simple font.
+     * 
+     * <p><b>Note:</b> Simple fonts only support 256 characters. For Unicode support, use
+     * {@link PDType0Font#load(PDDocument, File)} instead.</p>
+     *
+     * @param doc The PDF document that will hold the embedded font.
+     * @param file A TTF file.
+     * @param encoding The PostScript encoding vector to be used for embedding.
+     * @return a PDTrueTypeFont instance.
+     * @throws IOException If there is an error loading the data.
+     */
+    public static PDTrueTypeFont load(PDDocument doc, File file, Encoding encoding)
+            throws IOException
+    {
+        return new PDTrueTypeFont(doc, new FileInputStream(file), encoding);
+    }
+
+    /**
+     * Loads a TTF to be embedded into a document as a simple font.
+     *
+     * <p><b>Note:</b> Simple fonts only support 256 characters. For Unicode support, use
+     * {@link PDType0Font#load(PDDocument, InputStream)} instead.</p>
+     * 
+     * @param doc The PDF document that will hold the embedded font.
+     * @param input A TTF file stream
+     * @param encoding The PostScript encoding vector to be used for embedding.
+     * @return a PDTrueTypeFont instance.
+     * @throws IOException If there is an error loading the data.
+     */
+    public static PDTrueTypeFont load(PDDocument doc, InputStream input, Encoding encoding)
+            throws IOException
+    {
+        return new PDTrueTypeFont(doc, input, encoding);
+    }
+
+    /**
+     * Loads a TTF to be embedded into a document as a simple font. Only supports WinAnsiEncoding.
+     *
+     * @param doc The PDF document that will hold the embedded font.
+     * @param file A TTF file.
+     * @return a PDTrueTypeFont instance.
+     * @throws IOException If there is an error loading the data.
+     *
+     * @deprecated Use {@link PDType0Font#load(PDDocument, File)} instead.
+     */
+    @Deprecated
+    public static PDTrueTypeFont loadTTF(PDDocument doc, File file) throws IOException
+    {
+        return new PDTrueTypeFont(doc, new FileInputStream(file), WinAnsiEncoding.INSTANCE);
+    }
+
+    /**
+     * Loads a TTF to be embedded into a document as a simple font. Only supports WinAnsiEncoding.
+     *
+     * @param doc The PDF document that will hold the embedded font.
+     * @param input A TTF file stream
+     * @return a PDTrueTypeFont instance.
+     * @throws IOException If there is an error loading the data.
+     *
+     * @deprecated Use {@link PDType0Font#load(PDDocument, InputStream)} instead.
+     */
+    @Deprecated
+    public static PDTrueTypeFont loadTTF(PDDocument doc, InputStream input) throws IOException
+    {
+        return new PDTrueTypeFont(doc, input, WinAnsiEncoding.INSTANCE);
     }
 
     /**
@@ -270,22 +286,6 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
         }
     }
 
-    /**
-     * Creates a new TrueType font for embedding.
-     */
-    private PDTrueTypeFont(PDDocument document, InputStream ttfStream, Encoding encoding)
-            throws IOException
-    {
-        PDTrueTypeFontEmbedder embedder = new PDTrueTypeFontEmbedder(document, dict, ttfStream,
-                                                                     encoding);
-        this.encoding = encoding;
-        ttf = embedder.getTrueTypeFont();
-        setFontDescriptor(embedder.getFontDescriptor());
-        isEmbedded = true;
-        isDamaged = false;
-        glyphList = GlyphList.getAdobeGlyphList();
-    }
-
     @Override
     public int readCode(InputStream in) throws IOException
     {
@@ -300,6 +300,15 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
 
     @Override
     public BoundingBox getBoundingBox() throws IOException
+    {
+        if (fontBBox == null)
+        {
+            fontBBox = generateBoundingBox();
+        }
+        return fontBBox;
+    }
+
+    private BoundingBox generateBoundingBox() throws IOException
     {
         if (getFontDescriptor() != null) {
             PDRectangle bbox = getFontDescriptor().getFontBoundingBox();
@@ -351,16 +360,17 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
     @Override
     protected byte[] encode(int unicode) throws IOException
     {
-        if (getEncoding() != null)
+        if (encoding != null)
         {
-            if (!getEncoding().contains(getGlyphList().codePointToName(unicode)))
+            if (!encoding.contains(getGlyphList().codePointToName(unicode)))
             {
                 throw new IllegalArgumentException(
-                    String.format("U+%04X is not available in this font's Encoding", unicode));
+                    String.format("U+%04X is not available in this font's encoding: %s",
+                                  unicode, encoding.getEncodingName()));
             }
 
             String name = getGlyphList().codePointToName(unicode);
-            Map<String, Integer> inverted = getInvertedEncoding();
+            Map<String, Integer> inverted = encoding.getNameToCodeMap();
 
             if (!ttf.hasGlyph(name))
             {
@@ -400,7 +410,7 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
     }
 
     /**
-     * Inverts the font's code -> GID mapping. Any duplicate (GID -> code) mappings will be lost.
+     * Inverts the font's code -&gt; GID mapping. Any duplicate (GID -&gt; code) mappings will be lost.
      */
     protected Map<Integer, Integer> getGIDToCode() throws IOException
     {
@@ -483,10 +493,40 @@ public class PDTrueTypeFont extends PDSimpleFont implements PDVectorFont
     }
 
     @Override
+    public GeneralPath getNormalizedPath(int code) throws IOException
+    {
+        boolean hasScaling = ttf.getUnitsPerEm() != 1000;
+        float scale = 1000f / ttf.getUnitsPerEm();
+        int gid = codeToGID(code);
+
+        GeneralPath path = getPath(code);
+
+        // Acrobat only draws GID 0 for embedded or "Standard 14" fonts, see PDFBOX-2372
+        if (gid == 0 && !isEmbedded() && !isStandard14())
+        {
+            path = null;
+        }
+
+        if (path == null)
+        {
+            // empty glyph (e.g. space, newline)
+            return new GeneralPath();
+        }
+        else
+        {
+            if (hasScaling)
+            {
+                path.transform(AffineTransform.getScaleInstance(scale, scale));
+            }
+            return path;
+        }
+    }
+
+    @Override
     public boolean hasGlyph(String name) throws IOException
     {
         int gid = ttf.nameToGID(name);
-        return gid != 0;
+        return !(gid == 0 || gid >= ttf.getMaximumProfile().getNumGlyphs());
     }
 
     @Override

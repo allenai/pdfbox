@@ -19,7 +19,7 @@ package org.apache.pdfbox.pdmodel.interactive.form;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceContentStream;
 import org.apache.pdfbox.pdmodel.interactive.form.PlainText.Line;
 import org.apache.pdfbox.pdmodel.interactive.form.PlainText.Paragraph;
 import org.apache.pdfbox.pdmodel.interactive.form.PlainText.TextAttribute;
@@ -73,7 +73,7 @@ class PlainTextFormatter
     private final boolean wrapLines;
     private final float width;
     
-    private final PDPageContentStream contents;
+    private final PDAppearanceContentStream contents;
     private final PlainText textContent;
     private final TextAlign textAlignment;
     
@@ -84,7 +84,7 @@ class PlainTextFormatter
     {
 
         // required parameters
-        private PDPageContentStream contents;
+        private PDAppearanceContentStream contents;
 
         // optional parameters
         private AppearanceStyle appearanceStyle;
@@ -98,7 +98,7 @@ class PlainTextFormatter
         private float horizontalOffset = 0f;
         private float verticalOffset = 0f;
         
-        Builder(PDPageContentStream contents)
+        Builder(PDAppearanceContentStream contents)
         {
             this.contents = contents;
         }
@@ -174,7 +174,8 @@ class PlainTextFormatter
     {
         if (textContent != null && !textContent.getParagraphs().isEmpty())
         {
-            for (Paragraph paragraph : textContent.getParagraphs())
+            boolean isFirstParagraph = true;
+        	for (Paragraph paragraph : textContent.getParagraphs())
             {
                 if (wrapLines)
                 {
@@ -183,7 +184,8 @@ class PlainTextFormatter
                                 appearanceStyle.getFontSize(), 
                                 width
                             );
-                    processLines(lines);
+                    processLines(lines, isFirstParagraph);
+                    isFirstParagraph = false;
                 }
                 else
                 {
@@ -225,14 +227,14 @@ class PlainTextFormatter
      * @param lines the lines to process.
      * @throws IOException if there is an error writing to the stream.
      */
-    private void processLines(List<Line> lines) throws IOException
+    private void processLines(List<Line> lines, boolean isFirstParagraph) throws IOException
     {
         float wordWidth = 0f;
 
         float lastPos = 0f;
         float startOffset = 0f;
         float interWordSpacing = 0f;
-
+        
         for (Line line : lines)
         {
             switch (textAlignment)
@@ -255,20 +257,18 @@ class PlainTextFormatter
             
             float offset = -lastPos + startOffset + horizontalOffset;
             
-            if (lines.indexOf(line) == 0)
+            if (lines.indexOf(line) == 0 && isFirstParagraph)
             {
                 contents.newLineAtOffset(offset, verticalOffset);
-                // reset the initial verticalOffset
-                verticalOffset = 0f;
-                horizontalOffset = 0f;
             }
             else
             {
                 // keep the last position
                 verticalOffset = verticalOffset - appearanceStyle.getLeading();
-                contents.newLineAtOffset(offset, -appearanceStyle.getLeading());
+                contents.newLineAtOffset(offset, - appearanceStyle.getLeading());
             }
-            lastPos = startOffset; 
+
+            lastPos += offset; 
 
             List<Word> words = line.getWords();
             for (Word word : words)

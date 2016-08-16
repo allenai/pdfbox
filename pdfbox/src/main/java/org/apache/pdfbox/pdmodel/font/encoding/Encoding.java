@@ -51,23 +51,39 @@ public abstract class Encoding implements COSObjectable
         {
             return MacRomanEncoding.INSTANCE;
         }
+        else if (COSName.MAC_EXPERT_ENCODING.equals(name))
+        {
+            return MacExpertEncoding.INSTANCE;
+        }
         else
         {
             return null;
         }
     }
 
-    protected final Map<Integer, String> codeToName = new HashMap<Integer, String>();
+    protected final Map<Integer, String> codeToName = new HashMap<Integer, String>(250);
+    protected final Map<String, Integer> inverted = new HashMap<String, Integer>(250);
     private Set<String> names;
 
     /**
-     * Returns an unmodifiable view of the Code2Name mapping.
+     * Returns an unmodifiable view of the code -&gt; name mapping.
      * 
-     * @return the Code2Name map
+     * @return the code -&gt; name map
      */
     public Map<Integer, String> getCodeToNameMap()
     {
         return Collections.unmodifiableMap(codeToName);
+    }
+
+    /**
+     * Returns an unmodifiable view of the name -&gt; code mapping. More than one name may map to
+     * the same code.
+     *
+     * @return the name -&gt; code map
+     */
+    public Map<String, Integer> getNameToCodeMap()
+    {
+        return Collections.unmodifiableMap(inverted);
     }
 
     /**
@@ -79,6 +95,7 @@ public abstract class Encoding implements COSObjectable
     protected void add(int code, String name)
     {
         codeToName.put(code, name);
+        inverted.put(name, code);
     }
 
     /**
@@ -92,8 +109,15 @@ public abstract class Encoding implements COSObjectable
         // otherwise /Differences won't be accounted for
         if (names == null)
         {
-            names = new HashSet<String>();
-            names.addAll(codeToName.values());
+            synchronized(this)
+            {
+                // PDFBOX-3404: avoid possibility that one thread ends up with newly created empty map from other thread
+                Set<String> tmpSet = new HashSet<String>(codeToName.values());
+                // make sure that assignment is done after initialisation is complete
+                names = tmpSet;
+                // note that it might still happen that 'names' is initialized twice, but this is harmless
+            }
+            // at this point, names will never be null.
         }
         return names.contains(name);
     }
@@ -123,4 +147,9 @@ public abstract class Encoding implements COSObjectable
        }
        return ".notdef";
     }
+
+    /**
+     * Returns the name of this encoding.
+     */
+    public abstract String getEncodingName();
 }

@@ -213,16 +213,20 @@ public class PDAnnotationMarkup extends PDAnnotation
     }
 
     /**
-     * This will retrieve the annotation to which this one is "In Reply To" the actual relationship is specified by the
-     * RT entry.
+     * This will retrieve the annotation to which this one is "In Reply To" the actual relationship
+     * is specified by the RT entry.
      *
-     * @return the other annotation.
-     * @throws IOException if there is an error with the annotation.
+     * @return the other annotation or null if there is none.
+     * @throws IOException if there is an error creating the other annotation.
      */
     public PDAnnotation getInReplyTo() throws IOException
     {
-        COSBase irt = getCOSObject().getDictionaryObject("IRT");
-        return PDAnnotation.createAnnotation(irt);
+        COSBase base = getCOSObject().getDictionaryObject("IRT");
+        if (base instanceof COSDictionary)
+        {
+            return PDAnnotation.createAnnotation(base);
+        }
+        return null;
     }
 
     /**
@@ -323,6 +327,32 @@ public class PDAnnotationMarkup extends PDAnnotation
     public void setExternalData(PDExternalDataDictionary externalData)
     {
         this.getCOSObject().setItem("ExData", externalData);
+    }
+
+    /**
+     * This will set the border style dictionary, specifying the width and dash pattern used in drawing the line.
+     *
+     * @param bs the border style dictionary to set.
+     *
+     */
+    public void setBorderStyle(PDBorderStyleDictionary bs)
+    {
+        this.getCOSObject().setItem(COSName.BS, bs);
+    }
+
+    /**
+     * This will retrieve the border style dictionary, specifying the width and dash pattern used in drawing the line.
+     *
+     * @return the border style dictionary.
+     */
+    public PDBorderStyleDictionary getBorderStyle()
+    {
+        COSBase bs = getCOSObject().getDictionaryObject(COSName.BS);
+        if (bs instanceof COSDictionary)
+        {
+            return new PDBorderStyleDictionary((COSDictionary) bs);
+        }
+        return null;
     }
 
 }

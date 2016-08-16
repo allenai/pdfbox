@@ -17,11 +17,14 @@
 package org.apache.pdfbox.pdmodel.interactive.annotation;
 
 import java.io.IOException;
+import java.util.Calendar;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSInteger;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -558,12 +561,26 @@ public abstract class PDAnnotation implements COSObjectable
 
     /**
      * This will set the date and time the annotation was modified.
-     * 
-     * @param m the date and time the annotation was created.
+     *
+     * @param m the date and time the annotation was created. Date values used in a PDF shall
+     * conform to a standard date format, which closely follows that of the international standard
+     * ASN.1 (Abstract Syntax Notation One), defined in ISO/IEC 8824. A date shall be a text string
+     * of the form (D:YYYYMMDDHHmmSSOHH'mm). Alternatively, use
+     * {@link #setModifiedDate(java.util.Calendar)}
      */
     public void setModifiedDate(String m)
     {
         getCOSObject().setString(COSName.M, m);
+    }
+
+    /**
+     * This will set the date and time the annotation was modified.
+     *
+     * @param c the date and time the annotation was created.
+     */
+    public void setModifiedDate(Calendar c)
+    {
+        getCOSObject().setDate(COSName.M, c);
     }
 
     /**
@@ -608,6 +625,40 @@ public abstract class PDAnnotation implements COSObjectable
         getCOSObject().setInt(COSName.STRUCT_PARENT, structParent);
     }
 
+    /**
+     * This will retrieve the border array. If none is available, it will return the default, which
+     * is [0 0 1].
+     *
+     * @return the border array.
+     */
+    public COSArray getBorder()
+    {
+        COSBase base = getCOSObject().getDictionaryObject(COSName.BORDER);
+        COSArray border;
+        if (!(base instanceof COSArray))
+        {
+            border = new COSArray();
+            border.add(COSInteger.ZERO);
+            border.add(COSInteger.ZERO);
+            border.add(COSInteger.ONE);
+        }
+        else
+        {
+            border = (COSArray) base;
+        }
+        return border;
+    }
+    
+    /**
+     * This will set the border array.
+     * 
+     * @param borderArray the border array to set.
+     */
+    public void setBorder(COSArray borderArray)
+    {
+        getCOSObject().setItem(COSName.BORDER, borderArray);
+    }
+    
     /**
      * This will set the color used in drawing various elements. As of PDF 1.6 these are : Background of icon when
      * closed Title bar of popup window Border of a link annotation

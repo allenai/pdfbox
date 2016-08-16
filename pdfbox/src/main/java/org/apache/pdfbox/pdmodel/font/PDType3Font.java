@@ -118,7 +118,8 @@ public class PDType3Font extends PDSimpleFont
         int lastChar = dict.getInt(COSName.LAST_CHAR, -1);
         if (getWidths().size() > 0 && code >= firstChar && code <= lastChar)
         {
-            return getWidths().get(code - firstChar);
+            Float w = getWidths().get(code - firstChar);
+            return w == null ? 0 : w;
         }
         else
         {
@@ -261,10 +262,15 @@ public class PDType3Font extends PDSimpleFont
     @Override
     public BoundingBox getBoundingBox()
     {
-        if (fontBBox != null)
+        if (fontBBox == null)
         {
-            return fontBBox;
+            fontBBox = generateBoundingBox();
         }
+        return fontBBox;
+    }
+
+    private BoundingBox generateBoundingBox()
+    {
         PDRectangle rect = getFontBBox();
         if (rect.getLowerLeftX() == 0 && rect.getLowerLeftY() == 0
                 && rect.getUpperRightX() == 0 && rect.getUpperRightY() == 0)
@@ -296,9 +302,8 @@ public class PDType3Font extends PDSimpleFont
                 }
             }
         }
-        fontBBox = new BoundingBox(rect.getLowerLeftX(), rect.getLowerLeftY(),
+        return new BoundingBox(rect.getLowerLeftX(), rect.getLowerLeftY(),
                 rect.getUpperRightX(), rect.getUpperRightY());
-        return fontBBox;
     }
 
     /**

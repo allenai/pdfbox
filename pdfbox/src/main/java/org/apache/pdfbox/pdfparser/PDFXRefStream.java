@@ -77,7 +77,7 @@ public class PDFXRefStream implements PDFXRef
         {
             throw new IllegalArgumentException("size is not set in xrefstream");
         }
-        stream.setLong(COSName.SIZE, getSizeEntry());
+        stream.setLong(COSName.SIZE, size);
     
         List<Long> indexEntry = getIndexEntry();
         COSArray indexAsArray = new COSArray();
@@ -107,6 +107,11 @@ public class PDFXRefStream implements PDFXRef
             // "Other cross-reference stream entries not listed in Table 17 may be indirect; in fact, 
             // some (such as Root in Table 15) shall be indirect."
             if (COSName.ROOT.equals(cosName) || COSName.INFO.equals(cosName) || COSName.PREV.equals(cosName))
+            {
+                continue;
+            }
+            // this one too, because it has already been written in COSWriter.doWriteBody()
+            if (COSName.ENCRYPT.equals(cosName))
             {
                 continue;
             }
@@ -212,11 +217,6 @@ public class PDFXRefStream implements PDFXRef
         return w;
     }
 
-    private long getSizeEntry()
-    {
-        return size;
-    }
-
     /**
      * Set the size of the XRef stream.
      * 
@@ -232,8 +232,11 @@ public class PDFXRefStream implements PDFXRef
         LinkedList<Long> linkedList = new LinkedList<Long>();
         Long first = null;
         Long length = null;
-
-        for ( Long objNumber : objectNumbers )
+        Set<Long> objNumbers = new TreeSet<Long>();
+        // add object number 0 to the set
+        objNumbers.add(0L);
+        objNumbers.addAll(objectNumbers);
+        for ( Long objNumber : objNumbers )
         {
             if (first == null)
             {
@@ -275,6 +278,10 @@ public class PDFXRefStream implements PDFXRef
 
     private void writeStreamData(OutputStream os, int[] w) throws IOException
     {
+        // write dummy entry for object number 0
+        writeNumber(os, ENTRY_FREE, w[0]);
+        writeNumber(os, ENTRY_FREE, w[1]);
+        writeNumber(os, 0xFFFF, w[2]);
         // iterate over all streamData and write it in the required format
         for ( Object entry : streamData.values() )
         {

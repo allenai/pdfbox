@@ -192,6 +192,10 @@ public abstract class PDTerminalField extends PDField
     {
         COSArray kidsArray = COSArrayList.converterToCOSArray(children);
         getCOSObject().setItem(COSName.KIDS, kidsArray);
+        for (PDAnnotationWidget widget : children)
+        {
+            widget.getCOSObject().setItem(COSName.PARENT, this);
+        }
     }
     
     /**
@@ -216,10 +220,7 @@ public abstract class PDTerminalField extends PDField
      */
     protected final void applyChange() throws IOException
     {
-        if (!getAcroForm().getNeedAppearances())
-        {
-            constructAppearances();
-        }
+        constructAppearances();
         // if we supported JavaScript we would raise a field changed event here
     }
     

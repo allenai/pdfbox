@@ -208,8 +208,10 @@ public class COSParser extends BaseParser
         document.setStartXref(startXrefOffset);
         long prev = startXrefOffset;
         // ---- parse whole chain of xref tables/object streams using PREV reference
-        while (prev > 0)
+        long lastPrev = -1;
+        while (prev > 0 && prev != lastPrev)
         {
+            lastPrev = prev;
             // seek to xref table
             source.seek(prev);
 
@@ -298,6 +300,11 @@ public class COSParser extends BaseParser
                 }
             }
         }
+        if (prev == lastPrev)
+        {
+            //TODO better idea needed? PDFBOX-3446
+            throw new IOException("/Prev loop at offset " + prev);
+        }
         // ---- build valid xrefs out of the xref chain
         xrefTrailerResolver.setStartxref(startXrefOffset);
         COSDictionary trailer = xrefTrailerResolver.getTrailer();
@@ -324,7 +331,7 @@ public class COSParser extends BaseParser
 
         COSDictionary dict = parseCOSDictionary();
         COSStream xrefStream = parseCOSStream(dict);
-        parseXrefStream(xrefStream, (int) objByteOffset, isStandalone);
+        parseXrefStream(xrefStream, objByteOffset, isStandalone);
         xrefStream.close();
 
         return dict.getLong(COSName.PREV);
@@ -610,11 +617,12 @@ public class COSParser extends BaseParser
             for (COSObject obj : objToBeParsed.remove(objToBeParsed.firstKey()))
             {
                 COSBase parsedObj = parseObjectDynamically(obj, false);
-
-                obj.setObject(parsedObj);
-                addNewToList(toBeParsedList, parsedObj, addedObjects);
-
-                parsedObjects.add(getObjectId(obj));
+                if (parsedObj != null)
+                {
+                    obj.setObject(parsedObj);
+                    addNewToList(toBeParsedList, parsedObj, addedObjects);
+                    parsedObjects.add(getObjectId(obj));
+                }
             }
         }
     }
@@ -744,7 +752,7 @@ public class COSParser extends BaseParser
         {
             throw new IOException("XREF for " + objKey.getNumber() + ":"
                     + objKey.getGeneration() + " points to wrong object: " + readObjNr
-                    + ":" + readObjGen);
+                    + ":" + readObjGen + " at offset " + offsetOrObjstmObNr);
         }
 
         skipSpaces();
@@ -818,16 +826,29 @@ public class COSParser extends BaseParser
         {
             // parse object stream
             PDFObjectStreamParser parser = new PDFObjectStreamParser((COSStream) objstmBaseObj, document);
-            parser.parse();
-
-            // get set of object numbers referenced for this object stream
-            final Set<Long> refObjNrs = xrefTrailerResolver.getContainedObjectNumbers(objstmObjNr);
-
+            try
+            {
+                parser.parse();
+            }
+            catch(IOException exception)
+            {
+                if (isLenient)
+                {
+                    LOG.debug("Stop reading object stream "+objstmObjNr+" due to an exception", exception);
+                    // the error is handled in parseDictObjects
+                    return;
+                }
+                else
+                {
+                    throw exception;
+                }
+            }
             // register all objects which are referenced to be contained in object stream
             for (COSObject next : parser.getObjects())
             {
                 COSObjectKey stmObjKey = new COSObjectKey(next);
-                if (refObjNrs.contains(stmObjKey.getNumber()))
+                Long offset = xrefTrailerResolver.getXrefTable().get(stmObjKey); 
+                if (offset != null && offset == -objstmObjNr)
                 {
                     COSObject stmObj = document.getObjectFromPool(stmObjKey);
                     stmObj.setObject(next.getObject());
@@ -1191,22 +1212,31 @@ public class COSParser extends BaseParser
         source.seek(startXRefOffset-1);
         int nextValue = source.read();
         // the first character has to be a whitespace, and then a digit
-        if (isWhitespace(nextValue) && isDigit())
+        if (isWhitespace(nextValue))
         {
-            try
+            skipSpaces();
+            if (isDigit())
             {
-                // it's a XRef stream
-                readObjectNumber();
-                readGenerationNumber();
-                readExpectedString(OBJ_MARKER, true);
-                source.seek(startXRefOffset);
-                return startXRefOffset;
-            }
-            catch (IOException exception)
-            {
+                try
+                {
+                    // it's a XRef stream
+                    readObjectNumber();
+                    readGenerationNumber();
+                    readExpectedString(OBJ_MARKER, true);
+                    // check the dictionary to avoid false positives
+                    COSDictionary dict = parseCOSDictionary();
+                    source.seek(startXRefOffset);
+                    if (dict != null && "XRef".equals(dict.getNameAsString(COSName.TYPE)))
+                    {
+                        return startXRefOffset;
+                    }
+                }
+                catch (IOException exception)
+                {
                 // there wasn't an object of a xref stream
-                // try to repair the offset
-                source.seek(startXRefOffset);
+                    // try to repair the offset
+                    source.seek(startXRefOffset);
+                }
             }
         }
         // try to find a fixed offset
@@ -1236,7 +1266,7 @@ public class COSParser extends BaseParser
             LOG.debug("Fixed reference for xref table/stream " + objectOffset + " -> " + newOffset);
             return newOffset;
         }
-        LOG.error("Can't find the object axref table/stream at offset " + objectOffset);
+        LOG.error("Can't find the object xref table/stream at offset " + objectOffset);
         return 0;
     }
 
@@ -1275,6 +1305,34 @@ public class COSParser extends BaseParser
                 bfSearchForObjects();
                 if (bfSearchCOSObjectKeyOffsets != null && !bfSearchCOSObjectKeyOffsets.isEmpty())
                 {
+                    List<COSObjectKey> objStreams = new ArrayList<COSObjectKey>();
+                    // find all object streams
+                    for (COSObjectKey key : xrefOffset.keySet())
+                    {
+                        Long offset = xrefOffset.get(key);
+                        if (offset != null && offset < 0 )
+                        {
+                            COSObjectKey objStream = new COSObjectKey(-offset, 0);
+                            if (!objStreams.contains(objStream))
+                            {
+                                objStreams.add(new COSObjectKey(-offset, 0));
+                            }
+                        }
+                    }
+                    // remove all found object streams
+                    for (COSObjectKey key : bfSearchCOSObjectKeyOffsets.keySet())
+                    {
+                        objStreams.remove(key);
+                    }
+                    // remove all objects which are part of an object stream which wasn't found
+                    for (COSObjectKey key : objStreams)
+                    {
+                        Set<Long> objects = xrefTrailerResolver.getContainedObjectNumbers((int)(key.getNumber()));
+                        for (Long objNr :objects)
+                        {
+                            xrefOffset.remove(new COSObjectKey(objNr, 0));
+                        }
+                    }
                     LOG.debug("Replaced read xref table with the results of a brute force search");
                     xrefOffset.putAll(bfSearchCOSObjectKeyOffsets);
                 }
@@ -1439,12 +1497,12 @@ public class COSParser extends BaseParser
             long differenceStream = xrefOffset - newOffsetStream;
             if (Math.abs(differenceTable) > Math.abs(differenceStream))
             {
-                newOffset = differenceStream;
+                newOffset = newOffsetStream;
                 bfSearchXRefStreamsOffsets.remove(newOffsetStream);
             }
             else
             {
-                newOffset = differenceTable;
+                newOffset = newOffsetTable;
                 bfSearchXRefTablesOffsets.remove(newOffsetTable);
             }
         }
@@ -1642,13 +1700,14 @@ public class COSParser extends BaseParser
                             trailer.setItem(COSName.ROOT, document.getObjectFromPool(entry.getKey()));
                         }
                         // info dictionary
-                        else if (dictionary.containsKey(COSName.TITLE)
+                        else if (dictionary.containsKey(COSName.MOD_DATE) && 
+                                (dictionary.containsKey(COSName.TITLE)
                                 || dictionary.containsKey(COSName.AUTHOR)
                                 || dictionary.containsKey(COSName.SUBJECT)
                                 || dictionary.containsKey(COSName.KEYWORDS)
                                 || dictionary.containsKey(COSName.CREATOR)
                                 || dictionary.containsKey(COSName.PRODUCER)
-                                || dictionary.containsKey(COSName.CREATION_DATE))
+                                || dictionary.containsKey(COSName.CREATION_DATE)))
                         {
                             trailer.setItem(COSName.INFO, document.getObjectFromPool(entry.getKey()));
                         }
@@ -1950,7 +2009,7 @@ public class COSParser extends BaseParser
                 {
                     try
                     {
-                        int currOffset = Integer.parseInt(splitString[0]);
+                        long currOffset = Long.parseLong(splitString[0]);
                         int currGenID = Integer.parseInt(splitString[1]);
                         COSObjectKey objKey = new COSObjectKey(currObjID, currGenID);
                         xrefTrailerResolver.setXRef(objKey, currOffset);

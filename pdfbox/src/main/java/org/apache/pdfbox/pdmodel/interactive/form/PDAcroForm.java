@@ -34,6 +34,7 @@ import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.COSArrayList;
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
@@ -44,6 +45,7 @@ import org.apache.pdfbox.pdmodel.fdf.FDFField;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.util.Matrix;
 
 /**
@@ -192,6 +194,7 @@ public final class PDAcroForm implements COSObjectable
      * <p>Flattening a form field will take the current appearance and make that part
      * of the pages content stream. All form fields and annotations associated are removed.</p>
      * 
+     * @param fields
      * @param refreshAppearances if set to true the appearances for the form field widgets will be updated
      * @throws IOException 
      */
@@ -208,7 +211,7 @@ public final class PDAcroForm implements COSObjectable
     	// refresh the appearances if set
     	if (refreshAppearances)
     	{
-    		refreshAppearances();
+    		refreshAppearances(fields);
     	}
     	
         // indicates if the original content stream
@@ -217,6 +220,11 @@ public final class PDAcroForm implements COSObjectable
         
         // the content stream to write to
         PDPageContentStream contentStream;
+        
+        // Hold a reference between the annotations and the page they are on.
+        // This will only be used in case a PDAnnotationWidget doesn't contain
+        // a /P entry specifying the page it's on as the /P entry is optional
+        Map<COSDictionary, Integer> annotationToPageRef = null;
         
         // Iterate over all form fields and their widgets and create a
         // FormXObject at the page content level from that
@@ -227,21 +235,44 @@ public final class PDAcroForm implements COSObjectable
                 if (widget.getNormalAppearanceStream() != null)
                 {
                     PDPage page = widget.getPage();
+
+                    // resolve the page from looking at the annotations
+                    if (widget.getPage() == null) {
+                    	if (annotationToPageRef == null) {
+                    		annotationToPageRef = buildAnnotationToPageRef();
+                    	}
+                    	Integer pageRef = annotationToPageRef.get(widget.getCOSObject());
+                    	if (pageRef != null) {
+                    		page = document.getPage((int) pageRef);
+                    	}
+                    }
+
                     if (!isContentStreamWrapped)
                     {
-                        contentStream = new PDPageContentStream(document, page, true, true, true);
+                        contentStream = new PDPageContentStream(document, page, AppendMode.APPEND, true);
                         isContentStreamWrapped = true;
                     }
                     else
                     {
-                        contentStream = new PDPageContentStream(document, page, true, true);
+                        contentStream = new PDPageContentStream(document, page, AppendMode.APPEND, true);
                     }
                     
-                    PDFormXObject fieldObject = new PDFormXObject(widget.getNormalAppearanceStream().getCOSStream());
+                    PDAppearanceStream appearanceStream = widget.getNormalAppearanceStream();
                     
-                    Matrix translationMatrix = Matrix.getTranslateInstance(widget.getRectangle().getLowerLeftX(), widget.getRectangle().getLowerLeftY());
+                    PDFormXObject fieldObject = new PDFormXObject(appearanceStream.getCOSObject());
+                    
                     contentStream.saveGraphicsState();
-                    contentStream.transform(translationMatrix);
+                    
+                    // translate the appearance stream to the widget location if there is 
+                    // not already a transformation in place
+                    boolean needsTransformation = isNeedsTransformation(appearanceStream);
+                    if (needsTransformation)
+                    {
+                        Matrix translationMatrix = Matrix.getTranslateInstance(widget.getRectangle().getLowerLeftX(),
+                                widget.getRectangle().getLowerLeftY());
+                        contentStream.transform(translationMatrix);
+                    }
+                    
                     contentStream.drawForm(fieldObject);
                     contentStream.restoreGraphicsState();
                     contentStream.close();
@@ -293,6 +324,7 @@ public final class PDAcroForm implements COSObjectable
      * Refreshes the appearance streams and appearance dictionaries for 
      * the widget annotations of the specified fields.
      * 
+     * @param fields
      * @throws IOException
      */
     public void refreshAppearances(List<PDField> fields) throws IOException
@@ -483,7 +515,7 @@ public final class PDAcroForm implements COSObjectable
         COSDictionary dr = (COSDictionary) dictionary.getDictionaryObject(COSName.DR);
         if (dr != null)
         {
-            retval = new PDResources(dr);
+            retval = new PDResources(dr, document.getResourceCache());
         }
         return retval;
     }
@@ -546,9 +578,9 @@ public final class PDAcroForm implements COSObjectable
     
     /**
      * This will get the 'quadding' or justification of the text to be displayed.
-     * 0 - Left(default)<br/>
-     * 1 - Centered<br />
-     * 2 - Right<br />
+     * 0 - Left(default)<br>
+     * 1 - Centered<br>
+     * 2 - Right<br>
      * Please see the QUADDING_CONSTANTS.
      *
      * @return The justification of the text strings.
@@ -612,5 +644,42 @@ public final class PDAcroForm implements COSObjectable
     public void setAppendOnly(boolean appendOnly)
     {
         dictionary.setFlag(COSName.SIG_FLAGS, FLAG_APPEND_ONLY, appendOnly);
+    }
+    
+    private Map<COSDictionary, Integer> buildAnnotationToPageRef() {
+    	Map<COSDictionary, Integer> annotationToPageRef = new HashMap<COSDictionary, Integer>();
+    	
+    	int idx = 0;
+    	for (PDPage page : document.getPages()) {
+    		try {
+				for (PDAnnotation annotation : page.getAnnotations()) {
+					if (annotation instanceof PDAnnotationWidget) {
+						annotationToPageRef.put(annotation.getCOSObject(), idx);
+					}
+				}
+			} catch (IOException e) {
+				LOG.warn("Can't retriev annotations for page " + idx);
+			}
+    		idx++;
+    	}    	
+    	return annotationToPageRef;
+    }
+    
+    /**
+     * Check if there is a transformation needed to place the annotations content.
+     * 
+     * @param appearanceStream
+     * @return the need for a transformation.
+     */
+    private boolean isNeedsTransformation(PDAppearanceStream appearanceStream)
+    {
+        // Check if there is a XObject defined as this is an indication that there should already be a transformation
+        // in place.
+        // TODO: A more reliable approach might be to parse the content stream
+        if (appearanceStream.getResources() != null && appearanceStream.getResources().getXObjectNames().iterator().hasNext())
+        {
+            return false;
+        }
+        return true;
     }
 }

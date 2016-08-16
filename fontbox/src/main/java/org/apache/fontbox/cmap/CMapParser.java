@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.fontbox.util.Charsets;
+
 /**
  * Parses a CMap stream.
  *
@@ -373,6 +375,11 @@ public class CMapParser
             {
                 tokenBytes = (byte[]) nextToken;
             }
+            if (tokenBytes.length == 0)
+            {
+                // PDFBOX-3450: ignore <>
+                continue;
+            }
             boolean done = false;
 
             int arrayIndex = 0;
@@ -699,11 +706,11 @@ public class CMapParser
         String retval;
         if (bytes.length == 1)
         {
-            retval = new String(bytes, "ISO-8859-1");
+            retval = new String(bytes, Charsets.ISO_8859_1);
         }
         else
         {
-            retval = new String(bytes, "UTF-16BE");
+            retval = new String(bytes, Charsets.UTF_16BE);
         }
         return retval;
     }

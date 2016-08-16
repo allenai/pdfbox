@@ -72,7 +72,7 @@ public abstract class PDFStreamEngine
 {
     private static final Log LOG = LogFactory.getLog(PDFStreamEngine.class);
 
-    private final Map<String, OperatorProcessor> operators = new HashMap<String, OperatorProcessor>();
+    private final Map<String, OperatorProcessor> operators = new HashMap<String, OperatorProcessor>(80);
 
     private Matrix textMatrix;
     private Matrix textLineMatrix;
@@ -277,7 +277,7 @@ public abstract class PDFStreamEngine
         Matrix matrix = appearance.getMatrix();
 
         // zero-sized rectangles are not valid
-        if (rect.getWidth() > 0 && rect.getHeight() > 0)
+        if (rect != null && rect.getWidth() > 0 && rect.getHeight() > 0 && bbox != null)
         {
             // transformed appearance box  fixme: may be an arbitrary shape
             Rectangle2D transformedBox = bbox.transform(matrix).getBounds2D();
@@ -403,9 +403,10 @@ public abstract class PDFStreamEngine
     }
 
     /**
-     * Process a child stream of the given page. Cannot be used with #processPage(PDPage).
+     * Process a child stream of the given page. Cannot be used with {@link #processPage(PDPage)}.
      *
      * @param contentStream the child content stream
+     * @param page
      * @throws IOException if there is an exception while processing the stream
      */
     protected void processChildStream(PDContentStream contentStream, PDPage page) throws IOException
