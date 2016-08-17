@@ -29,7 +29,7 @@
 
     <groupId>org.apache.pdfbox</groupId>
     <artifactId>pdfbox-parent</artifactId>
-    <version>2.1.0-AI2-5d7feb-SNAPSHOT</version>
+    <version>2.1.0-AI2-ef339b</version>
     <packaging>pom</packaging>
 
     <name>PDFBox parent</name>
@@ -360,7 +360,7 @@
       <connection>scm:git:https://github.com/allenai/pdfbox.git</connection>
       <developerConnection>scm:git:git@github.com:allenai/pdfbox.git</developerConnection>
       <url>https://github.com/allenai/pdfbox</url>
-      <tag>HEAD</tag>
+      <tag>pdfbox-reactor-2.1.0-AI2-ef339b</tag>
   </scm>
 
   <distributionManagement>
