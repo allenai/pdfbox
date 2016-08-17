@@ -23,7 +23,7 @@
   <parent>
     <groupId>org.apache.pdfbox</groupId>
     <artifactId>pdfbox-parent</artifactId>
-    <version>2.1.0-AI2-ef339b</version>
+    <version>2.1.0-AI2-SNAPSHOT</version>
     <relativePath>../parent/pom.xml</relativePath>
   </parent>
 
