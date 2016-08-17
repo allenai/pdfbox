@@ -43,7 +43,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <maven.javadoc.skip>true</maven.javadoc.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
     </properties>
 
     <prerequisites>
@@ -119,6 +119,11 @@
             <id>jbig2.googlecode</id>
             <name>JBIG2 ImageIO-Plugin repository at googlecode.com</name>
             <url>https://jbig2-imageio.googlecode.com/svn/maven-repository/</url>
+        </repository>
+        <repository>
+            <id>bintray-allenai-maven</id>
+            <name>allenai-maven</name>
+            <url>https://api.bintray.com/maven/allenai/maven/pdfbox-parent/;publish=1</url>
         </repository>
     </repositories>
   
@@ -352,8 +357,16 @@
     </developers>
 
   <scm>
-    <connection>scm:svn:http://svn.apache.org/repos/asf/maven/pom/tags/2.0.0-RC2/pdfbox-parent</connection>
-    <developerConnection>scm:svn:https://svn.apache.org/repos/asf/maven/pom/tags/2.0.0-RC2/pdfbox-parent</developerConnection>
-    <url>http://svn.apache.org/viewvc/maven/pom/tags/2.0.0-RC2/pdfbox-parent</url>
+      <connection>scm:git:https://github.com/allenai/pdfbox.git</connection>
+      <developerConnection>scm:git:git@github.com:allenai/pdfbox.git</developerConnection>
+      <url>https://github.com/allenai/pdfbox</url>
+      <tag>HEAD</tag>
   </scm>
+
+  <distributionManagement>
+    <repository>
+      <id>bintray-allenai-maven</id>
+      <url>https://api.bintray.com/maven/allenai/maven/${project.groupId}:${project.artifactId}</url>
+    </repository>
+  </distributionManagement>
 </project>
