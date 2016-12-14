@@ -16,6 +16,7 @@
  */
 package org.apache.pdfbox.pdmodel.graphics.color;
 
+import java.awt.Color;
 import java.awt.color.ColorSpace;
 import java.util.Arrays;
 import org.apache.commons.logging.Log;
@@ -32,7 +33,6 @@ import org.apache.pdfbox.pdmodel.common.COSArrayList;
 import org.apache.pdfbox.pdmodel.common.PDRange;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 
-import java.awt.Color;
 import java.awt.color.CMMException;
 import java.awt.color.ICC_ColorSpace;
 import java.awt.color.ICC_Profile;
@@ -140,15 +140,19 @@ public final class PDICCBased extends PDCIEBasedColorSpace
             }
             initialColor = new PDColor(initial, this);
 
-            // create a color in order to trigger a ProfileDataException
+            // do things that trigger a ProfileDataException
             // or CMMException due to invalid profiles, see PDFBOX-1295 and PDFBOX-1740
+            // or ArrayIndexOutOfBoundsException, see PDFBOX-3610
+            awtColorSpace.fromRGB(new float[3]);
+            // this one triggers an exception for PDFBOX-3549 with KCMS
             new Color(awtColorSpace, new float[getNumberOfComponents()], 1f);
         }
         catch (RuntimeException e)
         {
             if (e instanceof ProfileDataException ||
                 e instanceof CMMException ||
-                e instanceof IllegalArgumentException)
+                e instanceof IllegalArgumentException ||
+                e instanceof ArrayIndexOutOfBoundsException)
             {
                 // fall back to alternateColorSpace color space
                 awtColorSpace = null;
@@ -368,10 +372,10 @@ public final class PDICCBased extends PDCIEBasedColorSpace
 
     /**
      * Sets the list of alternateColorSpace color spaces.
-     * This should be a list of PDColorSpace objects.
+     *
      * @param list the list of color space objects
      */
-    public void setAlternateColorSpaces(List list)
+    public void setAlternateColorSpaces(List<PDColorSpace> list)
     {
         COSArray altArray = null;
         if(list != null)

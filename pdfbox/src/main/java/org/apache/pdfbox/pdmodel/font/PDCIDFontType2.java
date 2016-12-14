@@ -127,7 +127,7 @@ public class PDCIDFontType2 extends PDCIDFont
     
                     if (otf.hasLayoutTables())
                     {
-                        LOG.error("OpenType Layout tables used in font " + getBaseFont() +
+                        LOG.info("OpenType Layout tables used in font " + getBaseFont() +
                                   " are not implemented in PDFBox and will be ignored");
                     }
                 }
@@ -197,8 +197,10 @@ public class PDCIDFontType2 extends PDCIDFont
     {
         if (getFontDescriptor() != null) {
             PDRectangle bbox = getFontDescriptor().getFontBoundingBox();
-            if (bbox.getLowerLeftX() != 0 || bbox.getLowerLeftY() != 0 ||
-                bbox.getUpperRightX() != 0 || bbox.getUpperRightY() != 0) {
+            if (bbox != null &&
+                    (bbox.getLowerLeftX() != 0 || bbox.getLowerLeftY() != 0
+                    || bbox.getUpperRightX() != 0 || bbox.getUpperRightY() != 0))
+            {
                 return new BoundingBox(bbox.getLowerLeftX(), bbox.getLowerLeftY(),
                                        bbox.getUpperRightX(), bbox.getUpperRightY());
             }

@@ -48,16 +48,21 @@ import org.apache.pdfbox.pdmodel.common.COSArrayList;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.pdmodel.encryption.PDEncryption;
 import org.apache.pdfbox.pdmodel.encryption.ProtectionPolicy;
 import org.apache.pdfbox.pdmodel.encryption.SecurityHandler;
 import org.apache.pdfbox.pdmodel.encryption.SecurityHandlerFactory;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
+import org.apache.pdfbox.pdmodel.interactive.digitalsignature.ExternalSigningSupport;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureOptions;
+import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SigningSupport;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField;
@@ -72,6 +77,14 @@ public class PDDocument implements Closeable
 {
     private static final Log LOG = LogFactory.getLog(PDDocument.class);
 
+    /**
+     * avoid concurrency issues with PDDeviceRGB
+     */
+    static
+    {
+    	PDDeviceRGB.INSTANCE.toRGB(new float[]{1,1,1,1});
+    }
+    
     private final COSDocument document;
 
     // cached values
@@ -100,7 +113,10 @@ public class PDDocument implements Closeable
     
     // Signature interface
     private SignatureInterface signInterface;
-    
+
+    // helper class used to create external signature
+    private SigningSupport signingSupport;
+
     // document-wide cached resources
     private ResourceCache resourceCache = new DefaultResourceCache();
     
@@ -171,7 +187,34 @@ public class PDDocument implements Closeable
     }
 
     /**
-     * Add a signature.
+     * Add parameters of signature to be created externally using default signature options. See
+     * {@link #saveIncrementalForExternalSigning(OutputStream)} method description on external
+     * signature creation scenario details.
+     *
+     * @param sigObject is the PDSignatureField model
+     * @throws IOException if there is an error creating required fields
+     */
+    public void addSignature(PDSignature sigObject) throws IOException
+    {
+        addSignature(sigObject, new SignatureOptions());
+    }
+
+    /**
+     * Add parameters of signature to be created externally. See
+     * {@link #saveIncrementalForExternalSigning(OutputStream)} method description on external
+     * signature creation scenario details.
+     *
+     * @param sigObject is the PDSignatureField model
+     * @param options signature options
+     * @throws IOException if there is an error creating required fields
+     */
+    public void addSignature(PDSignature sigObject, SignatureOptions options) throws IOException
+    {
+        addSignature(sigObject, null, options);
+    }
+
+    /**
+     * Add a signature to be created using the instance of given interface.
      * 
      * @param sigObject is the PDSignatureField model
      * @param signatureInterface is an interface which provides signing capabilities
@@ -260,6 +303,14 @@ public class PDDocument implements Closeable
             // backward linking
             signatureField.getWidgets().get(0).setPage(page);
         }
+        else
+        {
+            sigObject.getCOSObject().setNeedToBeUpdated(true);
+        }
+
+        // TODO This "overwrites" the settings of the original signature field which might not be intended by the user
+        // better make it configurable (not all users need/want PDF/A but their own setting):
+
         // to conform PDF/A-1 requirement:
         // The /F key's Print flag bit shall be set to 1 and 
         // its Hidden, Invisible and NoView flag bits shall be set to 0
@@ -272,6 +323,14 @@ public class PDDocument implements Closeable
         acroForm.setAppendOnly(true);
 
         boolean checkFields = checkSignatureField(acroFormFields, signatureField);
+        if (checkFields)
+        {
+            signatureField.getCOSObject().setNeedToBeUpdated(true);
+        }
+        else
+        {
+            acroFormFields.add(signatureField);
+        }
 
         // Get the object from the visual signature
         COSDocument visualSignature = options.getVisualSignature();
@@ -300,7 +359,16 @@ public class PDDocument implements Closeable
               ((COSArrayList<?>) annotations).toList().equals(((COSArrayList<?>) acroFormFields).toList()) &&
               checkFields))
         {
-            annotations.add(signatureField.getWidgets().get(0));
+            PDAnnotationWidget widget = signatureField.getWidgets().get(0);
+            // use check to prevent the annotation widget from appearing twice
+            if (checkSignatureAnnotation(annotations, widget))
+            {
+                widget.getCOSObject().setNeedToBeUpdated(true);
+            }
+            else
+            {
+                annotations.add(widget);
+            }   
         }
         page.getCOSObject().setNeedToBeUpdated(true);
     }
@@ -323,26 +391,44 @@ public class PDDocument implements Closeable
         return signatureField;
     }
 
-    // return true if the field already existed in the field list, in that case, it is marked for update
+    /**
+     * Check if the field already exists in the field list.
+     *
+     * @param acroFormFields the list of AcroForm fields.
+     * @param signatureField the signature field.
+     * @return true if the field already existed in the field list, false if not.
+     */
     private boolean checkSignatureField(List<PDField> acroFormFields, PDSignatureField signatureField)
     {
-        boolean checkFields = false;
         for (PDField field : acroFormFields)
         {
             if (field instanceof PDSignatureField
                     && field.getCOSObject().equals(signatureField.getCOSObject()))
             {
-                checkFields = true;
-                signatureField.getCOSObject().setNeedToBeUpdated(true);
-                break;
+                return true;
             }
             // fixme: this code does not check non-terminal fields, there could be a descendant signature
         }
-        if (!checkFields)
+        return false;
+    }
+
+    /**
+     * Check if the widget already exists in the annotation list
+     *
+     * @param acroFormFields the list of AcroForm fields.
+     * @param signatureField the signature field.
+     * @return true if the widget already existed in the annotation list, false if not.
+     */
+    private boolean checkSignatureAnnotation(List<PDAnnotation> annotations, PDAnnotationWidget widget)
+    {
+        for (PDAnnotation annotation : annotations)
         {
-            acroFormFields.add(signatureField);
+            if (annotation.getCOSObject().equals(widget.getCOSObject()))
+            {
+                return true;
+            }
         }
-        return checkFields;
+        return false;
     }
 
     private void prepareVisibleSignature(PDSignatureField signatureField, PDAcroForm acroForm, 
@@ -394,7 +480,13 @@ public class PDDocument implements Closeable
         // Read and set the rectangle for visual signature
         COSArray rectArray = (COSArray) annotDict.getDictionaryObject(COSName.RECT);
         PDRectangle rect = new PDRectangle(rectArray);
-        signatureField.getWidgets().get(0).setRectangle(rect);
+        PDRectangle existingRectangle = signatureField.getWidgets().get(0).getRectangle();
+
+        //in case of an existing field keep the original rect
+        if (existingRectangle == null || existingRectangle.getCOSArray().size() != 4)
+        {
+            signatureField.getWidgets().get(0).setRectangle(rect);
+        }
     }
 
     private void assignAppearanceDictionary(PDSignatureField signatureField, COSDictionary apDict)
@@ -428,7 +520,7 @@ public class PDDocument implements Closeable
     }
 
     /**
-     * This will add a signature field to the document.
+     * This will add a list of signature fields to the document.
      * 
      * @param sigFields are the PDSignatureFields that should be added to the document
      * @param signatureInterface is a interface which provides signing capabilities
@@ -463,7 +555,15 @@ public class PDDocument implements Closeable
             sigField.getCOSObject().setNeedToBeUpdated(true);
             
             // Check if the field already exists
-            checkSignatureField(acroformFields, sigField);
+            boolean checkSignatureField = checkSignatureField(acroformFields, sigField);
+            if (checkSignatureField)
+            {
+                sigField.getCOSObject().setNeedToBeUpdated(true);
+            }
+            else
+            {
+                acroformFields.add(sigField);
+            }
 
             // Check if we need to add a signature
             if (sigField.getSignature() != null)
@@ -762,9 +862,10 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
+     * @throws InvalidPasswordException If the file required a non-empty password.
      * @throws IOException in case of a file reading or parsing error
      */
-    public static PDDocument load(File file) throws IOException
+    public static PDDocument load(File file) throws InvalidPasswordException, IOException
     {
         return load(file, "", MemoryUsageSetting.setupMainMemoryOnly());
     }
@@ -777,9 +878,11 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
+     * @throws InvalidPasswordException If the file required a non-empty password.
      * @throws IOException in case of a file reading or parsing error
      */
-    public static PDDocument load(File file, MemoryUsageSetting memUsageSetting) throws IOException
+    public static PDDocument load(File file, MemoryUsageSetting memUsageSetting)
+            throws InvalidPasswordException, IOException
     {
         return load(file, "", null, null, memUsageSetting);
     }
@@ -792,9 +895,11 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
+     * @throws InvalidPasswordException If the password is incorrect.
      * @throws IOException in case of a file reading or parsing error
      */
-    public static PDDocument load(File file, String password) throws IOException
+    public static PDDocument load(File file, String password)
+            throws InvalidPasswordException, IOException
     {
         return load(file, password, null, null, MemoryUsageSetting.setupMainMemoryOnly());
     }
@@ -808,9 +913,11 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
+     * @throws InvalidPasswordException If the password is incorrect.
      * @throws IOException in case of a file reading or parsing error
      */
-    public static PDDocument load(File file, String password, MemoryUsageSetting memUsageSetting) throws IOException
+    public static PDDocument load(File file, String password, MemoryUsageSetting memUsageSetting)
+            throws InvalidPasswordException, IOException
     {
         return load(file, password, null, null, memUsageSetting);
     }
@@ -880,9 +987,10 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the PDF required a non-empty password.
+     * @throws IOException In case of a reading or parsing error.
      */
-    public static PDDocument load(InputStream input) throws IOException
+    public static PDDocument load(InputStream input) throws InvalidPasswordException, IOException
     {
         return load(input, "", null, null, MemoryUsageSetting.setupMainMemoryOnly());
     }
@@ -897,9 +1005,11 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the PDF required a non-empty password.
+     * @throws IOException In case of a reading or parsing error.
      */
-    public static PDDocument load(InputStream input, MemoryUsageSetting memUsageSetting) throws IOException
+    public static PDDocument load(InputStream input, MemoryUsageSetting memUsageSetting)
+            throws InvalidPasswordException, IOException
     {
         return load(input, "", null, null, memUsageSetting);
     }
@@ -913,10 +1023,11 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the password is incorrect.
+     * @throws IOException In case of a reading or parsing error.
      */
     public static PDDocument load(InputStream input, String password)
-            throws IOException
+            throws InvalidPasswordException, IOException
     {
         return load(input, password, null, null, MemoryUsageSetting.setupMainMemoryOnly());
     }
@@ -932,7 +1043,7 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws IOException In case of a reading or parsing error.
      */
     public static PDDocument load(InputStream input, String password, InputStream keyStore, String alias)
             throws IOException
@@ -951,10 +1062,11 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the password is incorrect.
+     * @throws IOException In case of a reading or parsing error.
      */
     public static PDDocument load(InputStream input, String password, MemoryUsageSetting memUsageSetting)
-            throws IOException
+            throws InvalidPasswordException, IOException
     {
         return load(input, password, null, null, memUsageSetting);
     }
@@ -972,7 +1084,8 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the password is incorrect.
+     * @throws IOException In case of a reading or parsing error.
      */
     public static PDDocument load(InputStream input, String password, InputStream keyStore, 
                                   String alias, MemoryUsageSetting memUsageSetting) throws IOException
@@ -999,9 +1112,10 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the PDF required a non-empty password.
+     * @throws IOException In case of a reading or parsing error.
      */
-    public static PDDocument load(byte[] input) throws IOException
+    public static PDDocument load(byte[] input) throws InvalidPasswordException, IOException
     {
         return load(input, "");
     }
@@ -1014,9 +1128,11 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the password is incorrect.
+     * @throws IOException In case of a reading or parsing error.
      */
-    public static PDDocument load(byte[] input, String password) throws IOException
+    public static PDDocument load(byte[] input, String password)
+            throws InvalidPasswordException, IOException
     {
         return load(input, password, null, null);
     }
@@ -1031,7 +1147,8 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the password is incorrect.
+     * @throws IOException In case of a reading or parsing error.
      */
     public static PDDocument load(byte[] input, String password, InputStream keyStore, 
             String alias) throws IOException
@@ -1050,7 +1167,8 @@ public class PDDocument implements Closeable
      * 
      * @return loaded document
      * 
-     * @throws IOException in case of a file reading or parsing error
+     * @throws InvalidPasswordException If the password is incorrect.
+     * @throws IOException In case of a reading or parsing error.
      */
     public static PDDocument load(byte[] input, String password, InputStream keyStore, 
             String alias, MemoryUsageSetting memUsageSetting) throws IOException
@@ -1112,7 +1230,6 @@ public class PDDocument implements Closeable
         try
         {
             writer.write(this);
-            writer.close();
         }
         finally
         {
@@ -1139,7 +1256,6 @@ public class PDDocument implements Closeable
             }
             writer = new COSWriter(output, pdfSource);
             writer.write(this, signInterface);
-            writer.close();
         }
         finally
         {
@@ -1148,6 +1264,52 @@ public class PDDocument implements Closeable
                 writer.close();
             }
         }
+    }
+
+    /**
+     * Save PDF incrementally without closing for external signature creation scenario. The general
+     * sequence is:
+     * <pre>
+     *    PDDocument pdDocument = ...;
+     *    OutputStream outputStream = ...;
+     *    SignatureOptions signatureOptions = ...; // options to specify fine tuned signature options or null for defaults
+     *    PDSignature pdSignature = ...;
+     *
+     *    // add signature parameters to be used when creating signature dictionary
+     *    pdDocument.addSignature(pdSignature, signatureOptions);
+     *    // prepare PDF for signing and obtain helper class to be used
+     *    ExternalSigningSupport externalSigningSupport = pdDocument.saveIncrementalForExternalSigning(outputStream);
+     *    // get data to be signed
+     *    InputStream dataToBeSigned = externalSigningSupport.getContent();
+     *    // invoke signature service
+     *    byte[] signature = sign(dataToBeSigned);
+     *    // set resulted CMS signature
+     *    externalSigningSupport.setSignature(signature);
+     *
+     *    // last step is to close the document
+     *    pdDocument.close();
+     * </pre>
+     * <p>
+     * Note that after calling this method, only {@code close()} method may invoked for
+     * {@code PDDocument} instance and only AFTER {@link ExternalSigningSupport} instance is used.
+     * </p>
+     *
+     * @param output stream to write final PDF
+     * @return instance to be used for external signing and setting CMS signature
+     * @throws IOException if the output could not be written
+     * @throws IllegalStateException if the document was not loaded from a file or a stream or
+     * signature optionss were not set.
+     */
+    public ExternalSigningSupport saveIncrementalForExternalSigning(OutputStream output) throws IOException
+    {
+        if (pdfSource == null)
+        {
+            throw new IllegalStateException("document was not loaded from a file or a stream");
+        }
+        COSWriter writer = new COSWriter(output, pdfSource);
+        writer.write(this);
+        signingSupport = new SigningSupport(writer);
+        return signingSupport;
     }
 
     /**
@@ -1191,6 +1353,12 @@ public class PDDocument implements Closeable
     {
         if (!document.isClosed())
         {
+            // close resources and COSWriter
+            if (signingSupport != null)
+            {
+                signingSupport.close();
+            }
+
             // close all intermediate I/O streams
             document.close();
             

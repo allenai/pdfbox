@@ -21,7 +21,6 @@ package org.apache.fontbox.ttf;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -101,10 +100,8 @@ public class GlyfCompositeDescript extends GlyfDescript
         int firstIndex = 0;
         int firstContour = 0;
 
-        Iterator<GlyfCompositeComp> i = components.iterator();
-        while (i.hasNext())
+        for (GlyfCompositeComp comp : components)
         {
-            GlyfCompositeComp comp = i.next();
             comp.setFirstIndex(firstIndex);
             comp.setFirstContour(firstContour);
 
@@ -259,7 +256,7 @@ public class GlyfCompositeDescript extends GlyfDescript
         for (GlyfCompositeComp c : components)
         {
             GlyphDescription gd = descriptions.get(c.getGlyphIndex());
-            if (c.getFirstIndex() <= i && i < (c.getFirstIndex() + gd.getPointCount()))
+            if (c.getFirstIndex() <= i && gd != null && i < (c.getFirstIndex() + gd.getPointCount()))
             {
                 return c;
             }
@@ -272,7 +269,7 @@ public class GlyfCompositeDescript extends GlyfDescript
         for (GlyfCompositeComp c : components)
         {
             GlyphDescription gd = descriptions.get(c.getGlyphIndex());
-            if (c.getFirstContour() <= i && i < (c.getFirstContour() + gd.getContourCount()))
+            if (c.getFirstContour() <= i && gd != null && i < (c.getFirstContour() + gd.getContourCount()))
             {
                 return c;
             }

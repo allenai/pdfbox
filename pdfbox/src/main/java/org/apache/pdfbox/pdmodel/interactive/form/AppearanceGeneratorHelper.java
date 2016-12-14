@@ -22,6 +22,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdfparser.PDFStreamParser;
@@ -47,6 +49,8 @@ import org.apache.pdfbox.util.Matrix;
  */
 class AppearanceGeneratorHelper
 {
+    private static final Log LOG = LogFactory.getLog(AppearanceGeneratorHelper.class);
+
     private static final Operator BMC = Operator.getOperator("BMC");
     private static final Operator EMC = Operator.getOperator("EMC");
  
@@ -102,6 +106,15 @@ class AppearanceGeneratorHelper
 
         for (PDAnnotationWidget widget : field.getWidgets())
         {
+        	
+        	PDRectangle rect = widget.getRectangle();
+            if (rect == null)
+            {
+            	widget.getCOSObject().removeItem(COSName.AP);
+                LOG.warn("widget of field " + field.getFullyQualifiedName() + " has no rectangle, no appearance stream created");
+                continue;
+            }
+        	
             PDFormFieldAdditionalActions actions = field.getActions();
 
             // in case all tests fail the field will be formatted by acrobat
@@ -127,8 +140,6 @@ class AppearanceGeneratorHelper
                 else
                 {
                     appearanceStream = new PDAppearanceStream(field.getAcroForm().getDocument());
-                    
-                    PDRectangle rect = widget.getRectangle();
                     
                     // Calculate the entries for the bounding box and the transformation matrix
                     // settings for the appearance stream
@@ -189,14 +200,23 @@ class AppearanceGeneratorHelper
         PDAppearanceContentStream contents = new PDAppearanceContentStream(appearanceStream, output);
         PDAppearanceCharacteristicsDictionary appearanceCharacteristics = widget.getAppearanceCharacteristics();
         
-        // TODO: support more entries like patterns, background color etc.
+        // TODO: support more entries like patterns, etc.
         if (appearanceCharacteristics != null)
         {
+            PDColor backgroundColour = appearanceCharacteristics.getBackground();
+            if (backgroundColour != null)
+            {
+                contents.setNonStrokingColor(backgroundColour);
+                PDRectangle bbox = resolveBoundingBox(widget, appearanceStream);
+                contents.addRect(bbox.getLowerLeftX(),bbox.getLowerLeftY(),bbox.getWidth(), bbox.getHeight());
+                contents.fill();
+            }
+
             float lineWidth = 0f;
             PDColor borderColour = appearanceCharacteristics.getBorderColour();
             if (borderColour != null)
             {
-                contents.setNonStrokingColor(borderColour);
+                contents.setStrokingColor(borderColour);
                 lineWidth = 1f;
             }
             PDBorderStyleDictionary borderStyle = widget.getBorderStyle();
@@ -207,7 +227,10 @@ class AppearanceGeneratorHelper
 
             if (lineWidth > 0)
             {
-                contents.setLineWidth(lineWidth);
+                if (lineWidth != 1)
+                {
+                    contents.setLineWidth(lineWidth);
+                }
                 PDRectangle bbox = resolveBoundingBox(widget, appearanceStream);
                 PDRectangle clipRect = applyPadding(bbox, Math.max(DEFAULT_PADDING, lineWidth/2)); 
                 contents.addRect(clipRect.getLowerLeftX(),clipRect.getLowerLeftY(),clipRect.getWidth(), clipRect.getHeight());

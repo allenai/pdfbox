@@ -22,6 +22,7 @@ import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionFactory;
 import org.apache.pdfbox.pdmodel.interactive.action.PDAnnotationAdditionalActions;
 import org.apache.pdfbox.pdmodel.interactive.action.PDAction;
+import org.apache.pdfbox.pdmodel.interactive.form.PDTerminalField;
 
 /**
  * This is the class that represents a widget.
@@ -40,7 +41,6 @@ public class PDAnnotationWidget extends PDAnnotation
      */
     public PDAnnotationWidget()
     {
-        super();
         getCOSObject().setName(COSName.SUBTYPE, SUB_TYPE);
     }
 
@@ -144,8 +144,12 @@ public class PDAnnotationWidget extends PDAnnotation
      */
     public PDAction getAction()
     {
-        COSDictionary action = (COSDictionary) this.getCOSObject().getDictionaryObject(COSName.A);
-        return PDActionFactory.createAction(action);
+        COSBase base = this.getCOSObject().getDictionaryObject(COSName.A);
+        if (base instanceof COSDictionary)
+        {
+            return PDActionFactory.createAction((COSDictionary) base);
+        }
+        return null;
     }
 
     /**
@@ -166,13 +170,12 @@ public class PDAnnotationWidget extends PDAnnotation
      */
     public PDAnnotationAdditionalActions getActions()
     {
-        COSDictionary aa = (COSDictionary) this.getCOSObject().getDictionaryObject(COSName.AA);
-        PDAnnotationAdditionalActions retval = null;
-        if (aa != null)
+        COSBase base = this.getCOSObject().getDictionaryObject(COSName.AA);
+        if (base instanceof COSDictionary)
         {
-            retval = new PDAnnotationAdditionalActions(aa);
+            return new PDAnnotationAdditionalActions((COSDictionary) base);
         }
-        return retval;
+        return null;
     }
 
     /**
@@ -222,4 +225,23 @@ public class PDAnnotationWidget extends PDAnnotation
     // }
     // return null;
     // }
+
+    /**
+     * Set the parent field of a widget annotation. This is only required if this widget annotation
+     * is one of multiple children in a field, and not to be set otherwise. You will usually not
+     * need this, because in most cases, fields have only one widget and share a common dictionary.
+     * A usage can be found in the CreateMultiWidgetsForm example.
+     *
+     * @param field the parent field.
+     * @throws IllegalArgumentException if setParent() was called for a field that shares a
+     * dictionary with its only widget.
+     */
+    public void setParent(PDTerminalField field)
+    {
+        if (this.getCOSObject().equals(field.getCOSObject()))
+        {
+            throw new IllegalArgumentException("setParent() is not to be called for a field that shares a dictionary with its only widget");
+        }
+        this.getCOSObject().setItem(COSName.PARENT, field);
+    }
 }

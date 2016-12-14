@@ -667,9 +667,9 @@ public final class PDPageContentStream extends PDAbstractContentStream implement
             throw new IllegalStateException("The color space must be set before setting a color");
         }
 
-        for (int i = 0; i < components.length; i++)
+        for (float component : components)
         {
-            writeOperand(components[i]);
+            writeOperand(component);
         }
 
         PDColorSpace currentStrokingColorSpace = strokingColorSpaceStack.peek();
@@ -741,9 +741,9 @@ public final class PDPageContentStream extends PDAbstractContentStream implement
             throw new IllegalStateException("The color space must be set before setting a color");
         }
 
-        for (int i = 0; i < components.length; i++)
+        for (float component : components)
         {
-            writeOperand(components[i]);
+            writeOperand(component);
         }
 
         PDColorSpace currentNonStrokingColorSpace = nonStrokingColorSpaceStack.peek();
@@ -843,7 +843,8 @@ public final class PDPageContentStream extends PDAbstractContentStream implement
      * @param yEnd The end y coordinate.
      * @throws IOException If there is an error while adding the line.
      * @throws IllegalStateException If the method was called within a text block.
-     * @deprecated Use {@link #moveTo} followed by {@link #lineTo}.
+     * @deprecated Use {@link #moveTo moveto(xStart,yStart)} followed by
+     * {@link #lineTo lineTo(xEnd,yEnd)}.
      */
     @Deprecated
     public void addLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException
@@ -865,7 +866,8 @@ public final class PDPageContentStream extends PDAbstractContentStream implement
      * @param yEnd The end y coordinate.
      * @throws IOException If there is an error while drawing on the screen.
      * @throws IllegalStateException If the method was called within a text block.
-     * @deprecated Use {@link #moveTo} followed by {@link #lineTo} followed by {@link #stroke}.
+     * @deprecated Use {@link #moveTo moveto(xStart,yStart)} followed by
+     * {@link #lineTo lineTo(xEnd,yEnd)} followed by {@link #stroke stroke()}.
      */
     @Deprecated
     public void drawLine(float xStart, float yStart, float xEnd, float yEnd) throws IOException

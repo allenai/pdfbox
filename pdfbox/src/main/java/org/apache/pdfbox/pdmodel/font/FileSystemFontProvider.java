@@ -285,7 +285,14 @@ final class FileSystemFontProvider extends FontProvider
         try
         {
             File file = getDiskCacheFile();
-            writer = new BufferedWriter(new FileWriter(file));
+            try
+            {
+                writer = new BufferedWriter(new FileWriter(file));
+            }
+            catch (SecurityException e)
+            {
+                return;
+            }
 
             for (FSFontInfo fontInfo : fontInfoList)
             {
@@ -360,7 +367,15 @@ final class FileSystemFontProvider extends FontProvider
         
         List<FSFontInfo> results = new ArrayList<FSFontInfo>();
         File file = getDiskCacheFile();
-        if (file.exists())
+        boolean fileExists = false;
+        try
+        {
+            fileExists = file.exists();
+        }
+        catch (SecurityException e)
+        {
+        }
+        if (fileExists)
         {
             BufferedReader reader = null;
             try
@@ -521,7 +536,12 @@ final class FileSystemFontProvider extends FontProvider
         try
         {
             // read PostScript name, if any
-            if (ttf.getName() != null)
+            if (ttf.getName() != null && ttf.getName().contains("|"))
+            {
+                fontInfoList.add(new FSIgnored(file, FontFormat.TTF, "*skippipeinname*"));
+                LOG.warn("Skipping font with '|' in name " + ttf.getName() + " in file " + file);
+            }
+            else if (ttf.getName() != null)
             {
                 // ignore bitmap fonts
                 if (ttf.getHeader() == null)
@@ -625,6 +645,12 @@ final class FileSystemFontProvider extends FontProvider
         try
         {
             Type1Font type1 = Type1Font.createWithPFB(input);
+            if (type1.getName() != null && type1.getName().contains("|"))
+            {
+                fontInfoList.add(new FSIgnored(pfbFile, FontFormat.PFB, "*skippipeinname*"));
+                LOG.warn("Skipping font with '|' in name " + type1.getName() + " in file " + pfbFile);
+                return;
+            }
             fontInfoList.add(new FSFontInfo(pfbFile, FontFormat.PFB, type1.getName(),
                                             null, -1, -1, 0, 0, -1, null, this));
 

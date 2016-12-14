@@ -27,6 +27,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Locale;
 import java.util.SimpleTimeZone;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
@@ -66,7 +67,7 @@ public final class DateConverter
      */
     private DateConverter()
     {
-    };
+    }
 
     /**
      * This will convert a string to a calendar.
@@ -255,11 +256,11 @@ public final class DateConverter
         }
         else if (pm == '+' && hh <= 12)
         {
-            tz.setID(String.format("GMT+%02d:%02d", hh, mm));
+            tz.setID(String.format(Locale.US, "GMT+%02d:%02d", hh, mm));
         }
         else if (pm == '-' && hh <= 14)
         {
-            tz.setID(String.format("GMT-%02d:%02d", hh, mm));
+            tz.setID(String.format(Locale.US, "GMT-%02d:%02d", hh, mm));
         }
         else
         {
@@ -288,24 +289,24 @@ public final class DateConverter
      */
     public static String toISO8601(Calendar cal, boolean printMillis)
     {
-        StringBuffer retval = new StringBuffer();
+        StringBuilder retval = new StringBuilder();
 
         retval.append(cal.get(Calendar.YEAR));
         retval.append("-");
-        retval.append(String.format("%02d", cal.get(Calendar.MONTH) + 1));
+        retval.append(String.format(Locale.US, "%02d", cal.get(Calendar.MONTH) + 1));
         retval.append("-");
-        retval.append(String.format("%02d", cal.get(Calendar.DAY_OF_MONTH)));
+        retval.append(String.format(Locale.US, "%02d", cal.get(Calendar.DAY_OF_MONTH)));
         retval.append("T");
-        retval.append(String.format("%02d", cal.get(Calendar.HOUR_OF_DAY)));
+        retval.append(String.format(Locale.US, "%02d", cal.get(Calendar.HOUR_OF_DAY)));
         retval.append(":");
-        retval.append(String.format("%02d", cal.get(Calendar.MINUTE)));
+        retval.append(String.format(Locale.US, "%02d", cal.get(Calendar.MINUTE)));
         retval.append(":");
-        retval.append(String.format("%02d", cal.get(Calendar.SECOND)));
+        retval.append(String.format(Locale.US, "%02d", cal.get(Calendar.SECOND)));
         
         if (printMillis)
         {
             retval.append(".");
-            retval.append(String.format("%03d", cal.get(Calendar.MILLISECOND)));
+            retval.append(String.format(Locale.US, "%03d", cal.get(Calendar.MILLISECOND)));
         }
 
         int timeZone = cal.get(Calendar.ZONE_OFFSET) + cal.get(Calendar.DST_OFFSET);

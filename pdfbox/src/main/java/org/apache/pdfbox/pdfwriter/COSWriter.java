@@ -26,6 +26,7 @@ import java.io.SequenceInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,13 +59,13 @@ import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.cos.COSUpdateInfo;
 import org.apache.pdfbox.cos.ICOSVisitor;
 import org.apache.pdfbox.io.IOUtils;
-import org.apache.pdfbox.io.RandomAccessBuffer;
 import org.apache.pdfbox.io.RandomAccessInputStream;
 import org.apache.pdfbox.io.RandomAccessRead;
 import org.apache.pdfbox.pdfparser.PDFXRefStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.SecurityHandler;
 import org.apache.pdfbox.pdmodel.fdf.FDFDocument;
+import org.apache.pdfbox.pdmodel.interactive.digitalsignature.COSFilterInputStream;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
 import org.apache.pdfbox.util.Charsets;
 import org.apache.pdfbox.util.Hex;
@@ -159,12 +160,12 @@ public class COSWriter implements ICOSVisitor, Closeable
      */
     public static final byte[] ENDSTREAM = "endstream".getBytes(Charsets.US_ASCII);
     
-    private final NumberFormat formatXrefOffset = new DecimalFormat("0000000000");
+    private final NumberFormat formatXrefOffset = new DecimalFormat("0000000000",
+            DecimalFormatSymbols.getInstance(Locale.US));
 
     // the decimal format for the xref object generation number data
-    private final NumberFormat formatXrefGeneration = new DecimalFormat("00000");
-
-    private final NumberFormat formatDecimal = NumberFormat.getNumberInstance( Locale.US );
+    private final NumberFormat formatXrefGeneration = new DecimalFormat("00000",
+            DecimalFormatSymbols.getInstance(Locale.US));
 
     // the stream where we create the pdf output
     private OutputStream output;
@@ -214,9 +215,10 @@ public class COSWriter implements ICOSVisitor, Closeable
     private long signatureOffset, signatureLength;
     private long byteRangeOffset, byteRangeLength;
     private RandomAccessRead incrementalInput;
-    private RandomAccessRead tempIncInput;
     private OutputStream incrementalOutput;
     private SignatureInterface signatureInterface;
+    private byte[] incrementPart;
+    private COSArray byteRangeArray;
 
     /**
      * COSWriter constructor comment.
@@ -225,27 +227,8 @@ public class COSWriter implements ICOSVisitor, Closeable
      */
     public COSWriter(OutputStream os)
     {
-        super();
         setOutput(os);
         setStandardOutput(new COSStandardOutputStream(output));
-        formatDecimal.setMaximumFractionDigits( 10 );
-        formatDecimal.setGroupingUsed( false );
-    }
-    
-    /**
-     * COSWriter constructor for incremental updates. 
-     *
-     * @param outputStream output stream where the new PDF data will be written
-     * @param inputStream input stream containing source PDF data
-     * 
-     * @throws IOException if something went wrong
-     * @deprecated Use {@link #COSWriter(OutputStream, RandomAccessRead)} instead
-     */
-    public COSWriter(OutputStream outputStream, InputStream inputStream) throws IOException
-    {
-        super();
-        tempIncInput = new RandomAccessBuffer(inputStream);
-        initWriter(outputStream, tempIncInput);
     }
 
     /**
@@ -258,22 +241,13 @@ public class COSWriter implements ICOSVisitor, Closeable
      */
     public COSWriter(OutputStream outputStream, RandomAccessRead inputData) throws IOException
     {
-        super();
-        initWriter(outputStream, inputData);
-    }
-
-    private void initWriter(OutputStream outputStream, RandomAccessRead inputData) throws IOException
-    {
         // write to buffer instead of output
         setOutput(new ByteArrayOutputStream());
-        setStandardOutput(new COSStandardOutputStream(output, (int)inputData.length()));
+        setStandardOutput(new COSStandardOutputStream(output, inputData.length()));
 
         incrementalInput = inputData;
         incrementalOutput = outputStream;
         incrementalUpdate = true;
-
-        formatDecimal.setMaximumFractionDigits( 10 );
-        formatDecimal.setGroupingUsed( false );
     }
 
     private void prepareIncrement(PDDocument doc)
@@ -341,10 +315,6 @@ public class COSWriter implements ICOSVisitor, Closeable
             getOutput().close();
         }
         if (incrementalOutput != null)
-        {
-            incrementalOutput.close();
-        }
-        if (tempIncInput != null)
         {
             incrementalOutput.close();
         }
@@ -538,15 +508,6 @@ public class COSWriter implements ICOSVisitor, Closeable
     public void doWriteObject( COSBase obj ) throws IOException
     {
         writtenObjects.add( obj );
-        if(obj instanceof COSDictionary)
-        {
-            COSBase itemType = ((COSDictionary) obj).getItem(COSName.TYPE);
-            if (COSName.SIG.equals(itemType) || COSName.DOC_TIME_STAMP.equals(itemType))
-            {
-                reachedSignature = true;
-            }
-        }
-
         // find the physical reference
         currentObjectKey = getObjectKey( obj );
         // add a x ref entry
@@ -733,6 +694,13 @@ public class COSWriter implements ICOSVisitor, Closeable
         long afterLength = getStandardOutput().getPos() - (inLength + signatureLength) - (signatureOffset - inLength);
 
         String byteRange = "0 " + beforeLength + " " + afterOffset + " " + afterLength + "]";
+        
+        // Assign the values to the actual COSArray, so that the user can access it before closing
+        byteRangeArray.set(0, COSInteger.ZERO);
+        byteRangeArray.set(1, COSInteger.get(beforeLength));
+        byteRangeArray.set(2, COSInteger.get(afterOffset));
+        byteRangeArray.set(3, COSInteger.get(afterLength));
+
         if (byteRangeLength - byteRange.length() < 0)
         {
             throw new IOException("Can't write new ByteRange, not enough space");
@@ -741,7 +709,7 @@ public class COSWriter implements ICOSVisitor, Closeable
         // copy the new incremental data into a buffer (e.g. signature dict, trailer)
         ByteArrayOutputStream byteOut = (ByteArrayOutputStream) output;
         byteOut.flush();
-        byte[] buffer = byteOut.toByteArray();
+        incrementPart = byteOut.toByteArray();
 
         // overwrite the ByteRange in the buffer
         byte[] byteRangeBytes = byteRange.getBytes(Charsets.ISO_8859_1);
@@ -749,26 +717,75 @@ public class COSWriter implements ICOSVisitor, Closeable
         {
             if (i >= byteRangeBytes.length)
             {
-                buffer[(int)(byteRangeOffset + i - inLength)] = 0x20; // SPACE
+                incrementPart[(int) (byteRangeOffset + i - inLength)] = 0x20; // SPACE
             }
             else
             {
-                buffer[(int)(byteRangeOffset + i - inLength)] = byteRangeBytes[i];
+                incrementPart[(int) (byteRangeOffset + i - inLength)] = byteRangeBytes[i];
             }
         }
 
-        // get only the incremental bytes to be signed (includes /ByteRange but not /Contents)
-        byte[] signBuffer = new byte[buffer.length - (int)signatureLength];
-        int bufSignatureOffset = (int)(signatureOffset - inLength);
-        System.arraycopy(buffer, 0, signBuffer, 0, bufSignatureOffset);
-        System.arraycopy(buffer, bufSignatureOffset + (int)signatureLength,
-                         signBuffer, bufSignatureOffset, buffer.length - bufSignatureOffset - (int)signatureLength);
+        if (signatureInterface != null)
+        {
+            // data to be signed
+            final InputStream dataToSign = getDataToSign();
 
-        SequenceInputStream signStream = new SequenceInputStream(new RandomAccessInputStream(incrementalInput),
-                new ByteArrayInputStream(signBuffer));
+            // sign the bytes
+            byte[] signatureBytes = signatureInterface.sign(dataToSign);
+            writeExternalSignature(signatureBytes);
+        }
+        // else signature should created externally and set via writeSignature()
+    }
 
-        // sign the bytes
-        byte[] signatureBytes = Hex.getBytes(signatureInterface.sign(signStream));
+    /**
+     * Return the stream of PDF data to be signed. Clients should use this method only to create
+     * signatures externally. {@link #write(PDDocument)} method should have been called prior. The
+     * created signature should be set using {@link #writeExternalSignature(byte[])}.
+     * <p>
+     * When {@link SignatureInterface} instance is used, COSWriter obtains and writes the signature
+     * itself.
+     * </p>
+     *
+     * @return data stream to be signed
+     * @throws IllegalStateException if PDF is not prepared for external signing
+     * @throws IOException if input data is closed
+     */
+    public InputStream getDataToSign() throws IOException
+    {
+        if (incrementPart == null || incrementalInput == null)
+        {
+            throw new IllegalStateException("PDF not prepared for signing");
+        }
+        // range of incremental bytes to be signed (includes /ByteRange but not /Contents)
+        int incPartSigOffset = (int) (signatureOffset - incrementalInput.length());
+        int afterSigOffset = incPartSigOffset + (int) signatureLength;
+        int[] range =
+        {
+            0, incPartSigOffset,
+            afterSigOffset, incrementPart.length - afterSigOffset
+        };
+
+        return new SequenceInputStream(
+                new RandomAccessInputStream(incrementalInput),
+                new COSFilterInputStream(incrementPart, range));
+    }
+
+    /**
+     * Write externally created signature of PDF data obtained via {@link #getDataToSign()} method.
+     *
+     * @param cmsSignature CMS signature byte array
+     * @throws IllegalStateException if PDF is not prepared for external signing
+     * @throws IOException if source data stream is closed
+     */
+    public void writeExternalSignature(byte[] cmsSignature) throws IOException
+    {
+
+        if (incrementPart == null || incrementalInput == null)
+        {
+            throw new IllegalStateException("PDF not prepared for setting signature");
+        }
+        byte[] signatureBytes = Hex.getBytes(cmsSignature);
+
         // substract 2 bytes because of the enclosing "<>"
         if (signatureBytes.length > signatureLength - 2)
         {
@@ -776,11 +793,15 @@ public class COSWriter implements ICOSVisitor, Closeable
         }
 
         // overwrite the signature Contents in the buffer
-        System.arraycopy(signatureBytes, 0, buffer, bufSignatureOffset + 1, signatureBytes.length);
+        int incPartSigOffset = (int) (signatureOffset - incrementalInput.length());
+        System.arraycopy(signatureBytes, 0, incrementPart, incPartSigOffset + 1, signatureBytes.length);
 
         // write the data to the incremental output stream
         IOUtils.copy(new RandomAccessInputStream(incrementalInput), incrementalOutput);
-        incrementalOutput.write(buffer);
+        incrementalOutput.write(incrementPart);
+
+        // prevent further use
+        incrementPart = null;
     }
 
     private void writeXrefRange(long x, long y) throws IOException
@@ -961,6 +982,14 @@ public class COSWriter implements ICOSVisitor, Closeable
     @Override
     public Object visitFromDictionary(COSDictionary obj) throws IOException
     {
+        if (!reachedSignature)
+        {
+            COSBase itemType = obj.getItem(COSName.TYPE);
+            if (COSName.SIG.equals(itemType) || COSName.DOC_TIME_STAMP.equals(itemType))
+            {
+                reachedSignature = true;
+            }
+        }        
         getStandardOutput().write(DICT_OPEN);
         getStandardOutput().writeEOL();
         for (Map.Entry<COSName, COSBase> entry : obj.entrySet())
@@ -1026,6 +1055,7 @@ public class COSWriter implements ICOSVisitor, Closeable
                     }
                     else if(reachedSignature && COSName.BYTERANGE.equals(entry.getKey()))
                     {
+                        byteRangeArray = (COSArray) entry.getValue();
                         byteRangeOffset = getStandardOutput().getPos() + 1;
                         value.accept(this);
                         byteRangeLength = getStandardOutput().getPos() - 1 - byteRangeOffset;
@@ -1216,7 +1246,8 @@ public class COSWriter implements ICOSVisitor, Closeable
     }
 
     /**
-     * This will write the pdf document.
+     * This will write the pdf document. If signature should be created externally,
+     * {@link #writeExternalSignature(byte[])} should be invoked to set signature after calling this method.
      *
      * @param doc The document to write.
      *
@@ -1228,10 +1259,12 @@ public class COSWriter implements ICOSVisitor, Closeable
     }
 
     /**
-     * This will write the pdf document.
+     * This will write the pdf document. If signature should be created externally,
+     * {@link #writeExternalSignature(byte[])} should be invoked to set signature after calling this method.
      *
      * @param doc The document to write.
-     * @param signInterface class to be used for signing 
+     * @param signInterface class to be used for signing; {@code null} if external signing would be performed
+     *                      or there will be no signing at all
      *
      * @throws IOException If an error occurs while generating the data.
      * @throws IllegalStateException If the document has an encryption dictionary but no protection
@@ -1284,8 +1317,17 @@ public class COSWriter implements ICOSVisitor, Closeable
 
         COSDocument cosDoc = pdDocument.getDocument();
         COSDictionary trailer = cosDoc.getTrailer();
-        COSArray idArray = (COSArray)trailer.getDictionaryObject( COSName.ID );
+        COSArray idArray = null;
         boolean missingID = true;
+        COSBase base = trailer.getDictionaryObject(COSName.ID);
+        if (base instanceof COSArray)
+        {
+            idArray = (COSArray) base;
+            if (idArray.size() == 2)
+            {
+                missingID = false;
+            }
+        }
         // check for an existing documentID
         if (idArray != null && idArray.size() == 2)
         {
@@ -1311,10 +1353,9 @@ public class COSWriter implements ICOSVisitor, Closeable
             COSDictionary info = (COSDictionary)trailer.getDictionaryObject( COSName.INFO );
             if( info != null )
             {
-                Iterator<COSBase> values = info.getValues().iterator();
-                while( values.hasNext() )
+                for (COSBase cosBase : info.getValues())
                 {
-                    md5.update(values.next().toString().getBytes(Charsets.ISO_8859_1));
+                    md5.update(cosBase.toString().getBytes(Charsets.ISO_8859_1));
                 }
             }
             // reuse origin documentID if available as first value

@@ -89,9 +89,8 @@ public class PDFXRefStream implements PDFXRef
 
         int[] wEntry = getWEntry();
         COSArray wAsArray = new COSArray();
-        for ( int i = 0; i < wEntry.length; i++ )
+        for (int j : wEntry)
         {
-            int j = wEntry[i];
             wAsArray.add(COSInteger.get(j));
         }
         stream.setItem(COSName.W, wAsArray);
@@ -318,7 +317,7 @@ public class PDFXRefStream implements PDFXRef
      * A class representing an object stream reference. 
      *
      */
-    class ObjectStreamReference
+    static class ObjectStreamReference
     {
         long objectNumberOfObjectStream;
         long offset;
@@ -328,7 +327,7 @@ public class PDFXRefStream implements PDFXRef
      * A class representing a normal reference. 
      *
      */
-    class NormalReference
+    static class NormalReference
     {
         int genNumber;
         long offset;
@@ -338,7 +337,7 @@ public class PDFXRefStream implements PDFXRef
      * A class representing a free reference. 
      *
      */
-    class FreeReference
+    static class FreeReference
     {
         int nextGenNumber;
         long nextFree;

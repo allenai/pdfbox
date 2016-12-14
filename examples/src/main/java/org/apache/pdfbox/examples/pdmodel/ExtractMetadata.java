@@ -25,7 +25,6 @@ import java.io.File;
 import java.io.IOException;
 import java.text.DateFormat;
 import java.util.Calendar;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.xmpbox.XMPMetadata;
@@ -146,10 +145,8 @@ public final class ExtractMetadata
             return;
         }
         System.out.println(title);
-        Iterator<String> iter = list.iterator();
-        while (iter.hasNext())
+        for (String string : list)
         {
-            String string = iter.next();
             System.out.println("  " + string);
         }
     }
@@ -161,10 +158,8 @@ public final class ExtractMetadata
             return;
         }
         System.out.println(title);
-        Iterator<Calendar> iter = list.iterator();
-        while (iter.hasNext())
+        for (Calendar calendar : list)
         {
-            Calendar calendar = iter.next();
             System.out.println("  " + format(calendar));
         }
     }

@@ -39,6 +39,9 @@ import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.tools.imageio.ImageIOUtil;
 import org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.form.PDTransparencyGroup;
+import org.apache.pdfbox.pdmodel.graphics.state.PDSoftMask;
 
 /**
  * Extracts the images from a PDF file.
@@ -192,7 +195,21 @@ public final class ExtractImages
 
         public void run() throws IOException
         {
-            processPage(getPage());
+            PDPage page = getPage();
+            processPage(page);
+            PDResources res = page.getResources();
+            for (COSName name : res.getExtGStateNames())
+            {
+                PDSoftMask softMask = res.getExtGState(name).getSoftMask();
+                if (softMask != null)
+                {
+                    PDTransparencyGroup group = softMask.getGroup();
+                    if (group != null)
+                    {
+                        processSoftMask(group);
+                    }
+                }
+            }
         }
 
         @Override
@@ -292,11 +309,23 @@ public final class ExtractImages
         }
     }
 
+    private boolean hasMasks(PDImage pdImage) throws IOException
+    {
+        if (pdImage instanceof PDImageXObject)
+        {
+            PDImageXObject ximg = (PDImageXObject) pdImage;
+            return ximg.getMask() != null || ximg.getSoftMask() != null;
+        }
+        return false;
+    }
+
     /**
-     * Writes the image to a file with the filename + an appropriate suffix, like "Image.jpg".
-     * The suffix is automatically set by the
-     * @param filename the filename
-     * @throws IOException When somethings wrong with the corresponding file.
+     * Writes the image to a file with the filename prefix + an appropriate suffix, like "Image.jpg".
+     * The suffix is automatically set depending on the image compression in the PDF.
+     * @param pdImage the image.
+     * @param prefix the filename prefix.
+     * @param directJPEG if true, force saving JPEG streams as they are in the PDF file. 
+     * @throws IOException When something is wrong with the corresponding file.
      */
     private void write2file(PDImage pdImage, String filename, boolean directJPEG) throws IOException
     {
@@ -316,10 +345,12 @@ public final class ExtractImages
                 if ("jpg".equals(suffix))
                 {
                     String colorSpaceName = pdImage.getColorSpace().getName();
-                    if (directJPEG || PDDeviceGray.INSTANCE.getName().equals(colorSpaceName) ||
-                                      PDDeviceRGB.INSTANCE.getName().equals(colorSpaceName))
+                    if (directJPEG || 
+                            !hasMasks(pdImage) && 
+                                     (PDDeviceGray.INSTANCE.getName().equals(colorSpaceName) ||
+                                      PDDeviceRGB.INSTANCE.getName().equals(colorSpaceName)))
                     {
-                        // RGB or Gray colorspace: get and write the unmodifiedJPEG stream
+                        // RGB or Gray colorspace: get and write the unmodified JPEG stream
                         InputStream data = pdImage.createInputStream(JPEG);
                         IOUtils.copy(data, out);
                         IOUtils.closeQuietly(data);

@@ -119,10 +119,11 @@ public abstract class SecurityHandler
      * @param documentIDArray  document id which is returned via {@link org.apache.pdfbox.cos.COSDocument#getDocumentID()}
      * @param decryptionMaterial Information used to decrypt the document.
      *
+     * @throws InvalidPasswordException If the password is incorrect.
      * @throws IOException If there is an error accessing data.
      */
     public abstract void prepareForDecryption(PDEncryption encryption, COSArray documentIDArray,
-            DecryptionMaterial decryptionMaterial) throws IOException;
+            DecryptionMaterial decryptionMaterial) throws InvalidPasswordException, IOException;
 
     /**
      * Encrypt or decrypt a set of data.
@@ -229,7 +230,7 @@ public abstract class SecurityHandler
     /**
      * Encrypt or decrypt data with AES with key length other than 256 bits.
      *
-     * @param finalKey The final key obtained with via {@link #calcFinalKey()}.
+     * @param finalKey The final key obtained with via {@link #calcFinalKey(long, long)}.
      * @param data The data to encrypt.
      * @param output The output to write the encrypted data to.
      * @param decrypt true to decrypt the data, false to encrypt it.
@@ -266,7 +267,11 @@ public abstract class SecurityHandler
             int n;
             while ((n = data.read(buffer)) != -1)
             {
-                output.write(decryptCipher.update(buffer, 0, n));
+                byte[] dst = decryptCipher.update(buffer, 0, n);
+                if (dst != null)
+                {
+                    output.write(dst);
+                }
             }
             output.write(decryptCipher.doFinal());
         }

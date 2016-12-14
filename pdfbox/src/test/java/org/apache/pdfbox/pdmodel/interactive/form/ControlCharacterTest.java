@@ -20,18 +20,13 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Deque;
 import java.util.List;
 
 import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.pdfparser.PDFStreamParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -81,7 +76,7 @@ public class ControlCharacterTest {
     	acroForm.getField("pdfbox-nul").setValue("NUL\0NUL");
     }
 
-    @Test(expected=IllegalArgumentException.class)
+    @Test
     public void characterTAB() throws IOException
     {
     	acroForm.getField("pdfbox-tab").setValue("TAB\tTAB");

@@ -33,7 +33,6 @@ import java.awt.geom.PathIterator;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
-import java.awt.image.Raster;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -50,7 +49,6 @@ import org.apache.pdfbox.pdmodel.common.function.PDFunction;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDVectorFont;
 import org.apache.pdfbox.pdmodel.graphics.PDLineDashPattern;
-import org.apache.pdfbox.pdmodel.graphics.blend.SoftMaskPaint;
 import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
 import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
@@ -94,7 +92,13 @@ public class PageDrawer extends PDFGraphicsStreamEngine
     
     // the page box to draw (usually the crop box but may be another)
     private PDRectangle pageSize;
+
+    private int pageRotation;
     
+    // whether image of a transparency group must be flipped
+    // needed when in a tiling pattern
+    private boolean flipTG = false;
+
     // clipping winding rule used for the clipping path
     private int clipWindingRule = -1;
     private GeneralPath linePath = new GeneralPath();
@@ -169,6 +173,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         graphics = (Graphics2D) g;
         xform = graphics.getTransform();
         this.pageSize = pageSize;
+        pageRotation = getPage().getRotation() % 360;
 
         setRenderingHints();
 
@@ -212,10 +217,14 @@ public class PageDrawer extends PDFGraphicsStreamEngine
 
         Area oldLastClip = lastClip;
         lastClip = null;
+        
+        boolean oldFlipTG = flipTG;
+        flipTG = true;
 
         setRenderingHints();
         processTilingPattern(pattern, color, colorSpace, patternMatrix);
-
+        
+        flipTG = oldFlipTG;
         graphics = oldGraphics;
         linePath = oldLinePath;
         lastClip = oldLastClip;
@@ -409,47 +418,31 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         linePath.closePath();
     }
 
-    /**
-     * Generates AWT raster for a soft mask
-     * 
-     * @param softMask soft mask
-     * @return AWT raster for soft mask
-     * @throws IOException
-     */
-    private Raster createSoftMaskRaster(PDSoftMask softMask) throws IOException
+    //TODO: move soft mask apply to getPaint()?
+    private Paint applySoftMaskToPaint(Paint parentPaint, PDSoftMask softMask) throws IOException
     {
-        TransparencyGroup transparencyGroup = new TransparencyGroup(softMask.getGroup(), true);
-        COSName subtype = softMask.getSubType();
-        if (COSName.ALPHA.equals(subtype))
+        if (softMask == null || softMask.getGroup() == null)
         {
-            return transparencyGroup.getAlphaRaster();
+            return parentPaint;
         }
-        else if (COSName.LUMINOSITY.equals(subtype))
+        TransparencyGroup transparencyGroup = new TransparencyGroup(softMask.getGroup(), true);
+        BufferedImage image = transparencyGroup.getImage();
+        BufferedImage gray = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
+        if (COSName.ALPHA.equals(softMask.getSubType()))
         {
-            return transparencyGroup.getLuminosityRaster();
+            gray.setData(image.getAlphaRaster());
+        }
+        else if (COSName.LUMINOSITY.equals(softMask.getSubType()))
+        {
+            Graphics g = gray.getGraphics();
+            g.drawImage(image, 0, 0, null);
+            g.dispose();
         }
         else
         {
             throw new IOException("Invalid soft mask subtype.");
         }
-    }
-
-    private Paint applySoftMaskToPaint(Paint parentPaint, PDSoftMask softMask) throws IOException
-    {
-        if (softMask != null) 
-        {
-            //TODO PDFBOX-2934
-            if (COSName.ALPHA.equals(softMask.getSubType()))
-            {
-                LOG.info("alpha smask not implemented yet, is ignored");
-                return parentPaint;
-            }
-            return new SoftMaskPaint(parentPaint, createSoftMaskRaster(softMask));
-        }
-        else 
-        {
-            return parentPaint;
-        }
+        return new SoftMask(parentPaint, gray, transparencyGroup.getBounds());
     }
 
     // returns the stroking AWT Paint
@@ -463,6 +456,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
     // returns the non-stroking AWT Paint
     private Paint getNonStrokingPaint() throws IOException
     {
+        //TODO why no soft mask?
         return getPaint(getGraphicsState().getNonStrokingColor());
     }
 
@@ -719,6 +713,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         if (pdImage.isStencil())
         {
             // fill the image with paint
+            //TODO why no soft mask?
             BufferedImage image = pdImage.getStencilImage(getNonStrokingPaint());
 
             // draw the image
@@ -1015,7 +1010,7 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         graphics.setStroke(stroke);
         graphics.setClip(null);
         COSArray pathsArray = (COSArray) base;
-        for (COSBase baseElement : (Iterable<? extends COSBase>) pathsArray.toList())
+        for (COSBase baseElement : pathsArray)
         {
             if (!(baseElement instanceof COSArray))
             {
@@ -1064,8 +1059,24 @@ public class PageDrawer extends PDFGraphicsStreamEngine
         AffineTransform prev = graphics.getTransform();
         float x = bbox.getLowerLeftX();
         float y = pageSize.getHeight() - bbox.getLowerLeftY() - bbox.getHeight();
-        graphics.setTransform(AffineTransform.getTranslateInstance(x * xform.getScaleX(),
-                                                                   y * xform.getScaleY()));
+
+        Matrix m = new Matrix(xform);
+        float xScale = Math.abs(m.getScalingFactorX());
+        float yScale = Math.abs(m.getScalingFactorY());
+        
+        // adjust the initial translation (includes the translation used to "help" the rotation)
+        graphics.setTransform(AffineTransform.getTranslateInstance(xform.getTranslateX(), xform.getTranslateY()));
+
+        graphics.rotate(Math.toRadians(pageRotation));
+
+        // adjust (x,y) at the initial scale + cropbox
+        graphics.translate((x - pageSize.getLowerLeftX()) * xScale, (y + pageSize.getLowerLeftY()) * yScale);
+
+        if (flipTG)
+        {
+            graphics.translate(0, group.getImage().getHeight());
+            graphics.scale(1, -1);
+        }
 
         PDSoftMask softMask = getGraphicsState().getSoftMask();
         if (softMask != null)
@@ -1130,7 +1141,9 @@ public class PageDrawer extends PDFGraphicsStreamEngine
                                         (float)clipRect.getWidth(), (float)clipRect.getHeight());
 
             // apply the underlying Graphics2D device's DPI transform
-            Shape deviceClip = xform.createTransformedShape(clip);
+            Matrix m = new Matrix(xform);
+            AffineTransform dpiTransform = AffineTransform.getScaleInstance(Math.abs(m.getScalingFactorX()), Math.abs(m.getScalingFactorY()));
+            Shape deviceClip = dpiTransform.createTransformedShape(clip);
             Rectangle2D bounds = deviceClip.getBounds2D();
 
             minX = (int) Math.floor(bounds.getMinX());
@@ -1145,16 +1158,31 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             Graphics2D g = image.createGraphics();
 
             // flip y-axis
-            g.translate(0, height);
+            g.translate(0, image.getHeight());
             g.scale(1, -1);
 
+            boolean oldFlipTG = flipTG;
+            flipTG = false;
+
             // apply device transform (DPI)
-            g.transform(xform);
+            // the initial translation is ignored, because we're not writing into the initial graphics device
+            g.transform(dpiTransform);
+
+            AffineTransform xformOriginal = xform;
+            xform = AffineTransform.getScaleInstance(m.getScalingFactorX(), m.getScalingFactorY());
+            PDRectangle pageSizeOriginal = pageSize;
+            pageSize = new PDRectangle(minX / Math.abs(m.getScalingFactorX()), 
+                                       minY / Math.abs(m.getScalingFactorY()),
+                        (float) bounds.getWidth() / Math.abs(m.getScalingFactorX()),
+                        (float) bounds.getHeight() / Math.abs(m.getScalingFactorY()));
+            int pageRotationOriginal = pageRotation;
+            pageRotation = 0;
 
             // adjust the origin
             g.translate(-clipRect.getX(), -clipRect.getY());
 
             graphics = g;
+            setRenderingHints();
             try
             {
                 if (isSoftMask)
@@ -1168,9 +1196,13 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             }
             finally 
             {
+                flipTG = oldFlipTG;
                 lastClip = lastClipOriginal;                
                 graphics.dispose();
                 graphics = g2dOriginal;
+                pageSize = pageSizeOriginal;
+                xform = xformOriginal;
+                pageRotation = pageRotationOriginal;
             }
         }
 
@@ -1184,19 +1216,17 @@ public class PageDrawer extends PDFGraphicsStreamEngine
             return bbox;
         }
 
-        public Raster getAlphaRaster()
+        public Rectangle2D getBounds()
         {
-            return image.getAlphaRaster();
-        }
-
-        public Raster getLuminosityRaster()
-        {
-            BufferedImage gray = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
-            Graphics g = gray.getGraphics();
-            g.drawImage(image, 0, 0, null);
-            g.dispose();
-
-            return gray.getRaster();
+            Point2D size = new Point2D.Double(pageSize.getWidth(), pageSize.getHeight());
+            // apply the underlying Graphics2D device's DPI transform and y-axis flip
+            Matrix m = new Matrix(xform);
+            AffineTransform dpiTransform = AffineTransform.getScaleInstance(Math.abs(m.getScalingFactorX()), Math.abs(m.getScalingFactorY()));
+            size = dpiTransform.transform(size, size);
+            // Flip y
+            return new Rectangle2D.Double(minX - pageSize.getLowerLeftX() * m.getScalingFactorX(),
+                    size.getY() - minY - height + pageSize.getLowerLeftY() * m.getScalingFactorY(),
+                    width, height);
         }
     }
 }

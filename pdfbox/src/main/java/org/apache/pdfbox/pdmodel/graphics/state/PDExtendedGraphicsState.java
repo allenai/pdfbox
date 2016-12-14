@@ -96,6 +96,14 @@ public class PDExtendedGraphicsState implements COSObjectable
             {
                 gs.setOverprintMode( getOverprintMode().doubleValue() );
             }
+            else if( key.equals( COSName.OP ) )
+            {
+                gs.setOverprint( getStrokingOverprintControl());
+            }
+            else if( key.equals( COSName.OP_NS ) )
+            {
+                gs.setNonStrokingOverprint(getNonStrokingOverprintControl());
+            }
             else if( key.equals( COSName.FONT ) )
             {
                 PDFontSetting setting = getFontSetting();
@@ -123,7 +131,7 @@ public class PDExtendedGraphicsState implements COSObjectable
             }
             else if( key.equals( COSName.CA_NS ) )
             {
-                gs.setNonStrokeAlphaConstants(getNonStrokingAlphaConstant() );
+                gs.setNonStrokeAlphaConstant(getNonStrokingAlphaConstant() );
             }
             else if( key.equals( COSName.AIS ) )
             {
@@ -498,7 +506,9 @@ public class PDExtendedGraphicsState implements COSObjectable
     }
 
     /**
-     * This will get the alpha source flag.
+     * This will get the alpha source flag (“alpha is shape”), that specifies whether the current
+     * soft mask and alpha constant shall be interpreted as shape values (true) or opacity values
+     * (false).
      *
      * @return The alpha source flag.
      */
@@ -508,7 +518,9 @@ public class PDExtendedGraphicsState implements COSObjectable
     }
 
     /**
-     * This will get the alpha source flag.
+     * This will get the alpha source flag (“alpha is shape”), that specifies whether the current
+     * soft mask and alpha constant shall be interpreted as shape values (true) or opacity values
+     * (false).
      *
      * @param alpha The alpha source flag.
      */

@@ -59,7 +59,7 @@ public class XrefTrailerResolver
     /**
      * A class which represents a xref/trailer object.
      */
-    private class XrefTrailerObj
+    private static class XrefTrailerObj
     {
         protected COSDictionary trailer = null;
 
@@ -88,7 +88,7 @@ public class XrefTrailerResolver
         /**
          * XRef stream type.
          */
-        STREAM;
+        STREAM
     }
     
     private final Map<Long, XrefTrailerObj> bytePosToXrefMap = new HashMap<Long, XrefTrailerObj>();
@@ -129,7 +129,17 @@ public class XrefTrailerResolver
         SortedSet<Long> sortedOffset = new TreeSet<Long>(offsets);
         return bytePosToXrefMap.get(sortedOffset.last()).trailer;
     }
-    
+
+    /**
+     * Returns the count of trailers.
+     *
+     * @return the count of trailers.
+     */
+    public final int getTrailerCount()
+    {
+        return bytePosToXrefMap.size();
+    }
+
     /**
      * Signals that a new XRef object (table or stream) starts.
      * @param startBytePos the offset to start at
@@ -165,7 +175,12 @@ public class XrefTrailerResolver
             LOG.warn( "Cannot add XRef entry for '" + objKey.getNumber() + "' because XRef start was not signalled." );
             return;
         }
-        curXrefTrailerObj.xrefTable.put( objKey, offset );
+        // PDFBOX-3506 check before adding to the map, to avoid entries from the table being 
+        // overwritten by obsolete entries in hybrid files (/XRefStm entry)
+        if (!curXrefTrailerObj.xrefTable.containsKey(objKey) )
+        {
+            curXrefTrailerObj.xrefTable.put(objKey, offset);
+        }
     }
 
     /**

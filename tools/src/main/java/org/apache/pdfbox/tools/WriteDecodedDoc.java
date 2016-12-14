@@ -19,7 +19,6 @@ package org.apache.pdfbox.tools;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Iterator;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSObject;
@@ -36,6 +35,7 @@ public class WriteDecodedDoc
 {
 
     private static final String PASSWORD = "-password";
+    private static final String SKIPIMAGES = "-skipImages";
 
     /**
      * Constructor.
@@ -51,10 +51,11 @@ public class WriteDecodedDoc
      * @param in The filename used for input.
      * @param out The filename used for output.
      * @param password The password to open the document.
+     * @param skipImages Whether to skip decoding images.
      *
      * @throws IOException if the output could not be written
      */
-    public void doIt(String in, String out, String password)
+    public void doIt(String in, String out, String password, boolean skipImages)
             throws IOException
     {
         PDDocument doc = null;
@@ -62,13 +63,31 @@ public class WriteDecodedDoc
         {
             doc = PDDocument.load(new File(in), password);
             doc.setAllSecurityToBeRemoved(true);
-            for (Iterator<COSObject> i = doc.getDocument().getObjects().iterator(); i.hasNext();)
+            for (COSObject cosObject : doc.getDocument().getObjects())
             {
-                COSBase base = i.next().getObject();
+                COSBase base = cosObject.getObject();
                 if (base instanceof COSStream)
                 {
-                    COSStream stream = (COSStream)base;
-                    byte[] bytes = new PDStream(stream).toByteArray();
+                    COSStream stream = (COSStream) base;
+                    if (skipImages &&
+                        COSName.XOBJECT.equals(stream.getItem(COSName.TYPE)) && 
+                        COSName.IMAGE.equals(stream.getItem(COSName.SUBTYPE)))
+                    {
+                        continue;
+                    }
+                    byte[] bytes;
+                    try
+                    {
+                        bytes = new PDStream(stream).toByteArray();
+                    }
+                    catch (IOException ex)
+                    {
+                        System.err.println("skip " + 
+                                cosObject.getObjectNumber() + " " + 
+                                cosObject.getGenerationNumber() + " obj: " + 
+                                ex.getMessage());
+                        continue;
+                    }
                     stream.removeItem(COSName.FILTER);
                     OutputStream streamOut = stream.createOutputStream();
                     streamOut.write(bytes);
@@ -104,6 +123,7 @@ public class WriteDecodedDoc
         String password = "";
         String pdfFile = null;
         String outputFile = null;
+        boolean skipImages = false;
         for( int i=0; i<args.length; i++ )
         {
             if( args[i].equals( PASSWORD ) )
@@ -114,6 +134,10 @@ public class WriteDecodedDoc
                     usage();
                 }
                 password = args[i];
+            }
+            else if (args[i].equals( SKIPIMAGES ))
+            {
+                skipImages = true;
             }
             else
             {
@@ -137,7 +161,7 @@ public class WriteDecodedDoc
             {
                 outputFile = calculateOutputFilename(pdfFile);
             }
-            app.doIt(pdfFile, outputFile, password);
+            app.doIt(pdfFile, outputFile, password, skipImages);
         }
     }
 
@@ -164,6 +188,7 @@ public class WriteDecodedDoc
         String message = "Usage: java -jar pdfbox-app-x.y.z.jar WriteDecodedDoc [options] <inputfile> [outputfile]\n"
                 + "\nOptions:\n"
                 + "  -password <password> : Password to decrypt the document\n"
+                + "  -skipImages          : Don't uncompress images\n"
                 + "  <inputfile>          : The PDF document to be decompressed\n"
                 + "  [outputfile]         : The filename for the decompressed pdf\n";
        

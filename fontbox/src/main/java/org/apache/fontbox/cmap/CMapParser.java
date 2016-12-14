@@ -437,7 +437,7 @@ public class CMapParser
         {
             // header operations, for now return the entire line
             // may need to smarter in the future
-            StringBuffer buffer = new StringBuffer();
+            StringBuilder buffer = new StringBuilder();
             buffer.append((char) nextByte);
             readUntilEndOfLine(is, buffer);
             retval = buffer.toString();
@@ -445,7 +445,7 @@ public class CMapParser
         }
         case '(':
         {
-            StringBuffer buffer = new StringBuffer();
+            StringBuilder buffer = new StringBuilder();
             int stringByte = is.read();
 
             while (stringByte != -1 && stringByte != ')')
@@ -559,7 +559,7 @@ public class CMapParser
         }
         case '/':
         {
-            StringBuffer buffer = new StringBuffer();
+            StringBuilder buffer = new StringBuilder();
             int stringByte = is.read();
 
             while (!isWhitespaceOrEOF(stringByte) && !isDelimiter(stringByte))
@@ -590,7 +590,7 @@ public class CMapParser
         case '8':
         case '9':
         {
-            StringBuffer buffer = new StringBuffer();
+            StringBuilder buffer = new StringBuilder();
             buffer.append((char) nextByte);
             nextByte = is.read();
 
@@ -603,7 +603,7 @@ public class CMapParser
             String value = buffer.toString();
             if (value.indexOf('.') >= 0)
             {
-                retval = new Double(value);
+                retval = Double.valueOf(value);
             }
             else
             {
@@ -613,7 +613,7 @@ public class CMapParser
         }
         default:
         {
-            StringBuffer buffer = new StringBuffer();
+            StringBuilder buffer = new StringBuilder();
             buffer.append((char) nextByte);
             nextByte = is.read();
 
@@ -636,7 +636,7 @@ public class CMapParser
         return retval;
     }
 
-    private void readUntilEndOfLine(InputStream is, StringBuffer buf) throws IOException
+    private void readUntilEndOfLine(InputStream is, StringBuilder buf) throws IOException
     {
         int nextByte = is.read();
         while (nextByte != -1 && nextByte != 0x0D && nextByte != 0x0A)
@@ -742,7 +742,7 @@ public class CMapParser
     /**
      * Internal class.
      */
-    private final class LiteralName
+    private static final class LiteralName
     {
         private String name;
 
@@ -755,7 +755,7 @@ public class CMapParser
     /**
      * Internal class.
      */
-    private final class Operator
+    private static final class Operator
     {
         private String op;
 

@@ -84,6 +84,7 @@ public class DomXmpParser
             dbFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
             dbFactory.setXIncludeAware(false);
             dbFactory.setExpandEntityReferences(false);
+            dbFactory.setIgnoringComments(true);
             dbFactory.setNamespaceAware(true);
             dBuilder = dbFactory.newDocumentBuilder();
             nsFinder = new NamespaceFinder();
@@ -789,25 +790,32 @@ public class DomXmpParser
      */
     private void removeComments(Node root)
     {
-        if (root.getChildNodes().getLength()<=1) 
+    	// will hold the nodes which are to be deleted
+    	List<Node> forDeletion = new ArrayList<Node>();
+    	
+    	NodeList nl = root.getChildNodes();
+    	
+        if (nl.getLength()<=1) 
         {
             // There is only one node so we do not remove it
             return;
         }
-        NodeList nl = root.getChildNodes();
-        for (int i=0; i < nl.getLength(); i++) 
+        
+        for (int i = 0; i < nl.getLength(); i++) 
         {
             Node node = nl.item(i);
             if (node instanceof Comment)
             {
-                // remove the comment
-                root.removeChild(node);
+                // comments to be deleted
+            	forDeletion.add(node);
             }
             else if (node instanceof Text)
             {
                 if (node.getTextContent().trim().isEmpty())
                 {
-                        root.removeChild(node);
+                	// TODO: verify why this is necessary
+                	// empty text nodes to be deleted
+                	forDeletion.add(node);
                 }
             }
             else if (node instanceof Element)
@@ -815,6 +823,12 @@ public class DomXmpParser
                 // clean child
                 removeComments(node);
             } // else do nothing
+        }
+
+        // now remove the child nodes
+        for (Node node : forDeletion)
+        {
+        	root.removeChild(node);
         }
     }
 
@@ -868,7 +882,7 @@ public class DomXmpParser
         }
     }
 
-    protected class NamespaceFinder
+    protected static class NamespaceFinder
     {
 
         private final Stack<Map<String, String>> stack = new Stack<Map<String, String>>();

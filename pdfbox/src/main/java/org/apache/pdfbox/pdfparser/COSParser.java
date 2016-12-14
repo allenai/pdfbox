@@ -24,7 +24,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -250,6 +249,7 @@ public class COSParser extends BaseParser
                     fixedOffset = checkXRefStreamOffset(streamOffset, false);
                     if (fixedOffset > -1 && fixedOffset != streamOffset)
                     {
+                        LOG.warn("/XRefStm offset " + streamOffset + " is incorrect, corrected to " + fixedOffset);
                         streamOffset = (int)fixedOffset;
                         trailer.setInt(COSName.XREF_STM, streamOffset);
                     }
@@ -257,7 +257,21 @@ public class COSParser extends BaseParser
                     {
                         source.seek(streamOffset);
                         skipSpaces();
-                        parseXrefObjStream(prev, false);
+                        try
+                        {
+                            parseXrefObjStream(prev, false);
+                        }
+                        catch (IOException ex)
+                        {
+                            if (isLenient)
+                            {
+                                LOG.error("Failed to parse /XRefStm at offset " + streamOffset, ex);
+                            }
+                            else
+                            {
+                                throw ex;
+                            }
+                        }
                     }
                     else
                     {
@@ -551,10 +565,9 @@ public class COSParser extends BaseParser
                 }
                 else if (baseObj instanceof COSArray)
                 {
-                    final Iterator<COSBase> arrIter = ((COSArray) baseObj).iterator();
-                    while (arrIter.hasNext())
+                    for (COSBase cosBase : ((COSArray) baseObj))
                     {
-                        addNewToList(toBeParsedList, arrIter.next(), addedObjects);
+                        addNewToList(toBeParsedList, cosBase, addedObjects);
                     }
                 }
                 else if (baseObj instanceof COSObject)
@@ -1934,7 +1947,14 @@ public class COSParser extends BaseParser
         }
         if (headerVersion < 0)
         {
-            throw new IOException( "Error getting header version: " + header);
+            if (isLenient)
+            {
+                headerVersion = 1.7f;
+            }
+            else
+            {
+                throw new IOException("Error getting header version: " + header);
+            }
         }
         document.setVersion(headerVersion);
         // rewind

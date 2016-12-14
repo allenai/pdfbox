@@ -89,10 +89,11 @@ public abstract class PDAnnotation implements COSObjectable
 
     /**
      * Create the correct annotation from the base COS object.
-     * 
+     *
      * @param base The COS object that is the annotation.
      * @return The correctly typed annotation object.
-     * @throws IOException If there is an error while creating the annotation.
+     *
+     * @throws IOException If the annotation type is unknown.
      */
     public static PDAnnotation createAnnotation(COSBase base) throws IOException
     {
@@ -203,10 +204,10 @@ public abstract class PDAnnotation implements COSObjectable
         PDRectangle rectangle = null;
         if (rectArray != null)
         {
-            if (rectArray.size() == 4 && rectArray.get(0) instanceof COSNumber
-                    && rectArray.get(1) instanceof COSNumber
-                    && rectArray.get(2) instanceof COSNumber
-                    && rectArray.get(3) instanceof COSNumber)
+            if (rectArray.size() == 4 && rectArray.getObject(0) instanceof COSNumber
+                    && rectArray.getObject(1) instanceof COSNumber
+                    && rectArray.getObject(2) instanceof COSNumber
+                    && rectArray.getObject(3) instanceof COSNumber)
             {
                 rectangle = new PDRectangle(rectArray);
             }

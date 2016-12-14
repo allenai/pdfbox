@@ -41,7 +41,7 @@ public class PreflightContext implements Closeable
     /**
      * Contains the list of font name embedded in the PDF document.
      */
-    private final Map<COSBase, FontContainer> fontContainers = new HashMap<COSBase, FontContainer>();
+    private final Map<COSBase, FontContainer<?>> fontContainers = new HashMap<COSBase, FontContainer<?>>();
 
     /**
      * The PDFbox object representation of the PDF source.
@@ -79,6 +79,8 @@ public class PreflightContext implements Closeable
 
     private Integer currentPageNumber = null;
     
+    private long fileLen;
+
     /**
      * Create the DocumentHandler using the DataSource which represent the PDF file to check.
      * 
@@ -160,7 +162,7 @@ public class PreflightContext implements Closeable
      * @param cBase the COSBase for the font container.
      * @param fc the font container.
      */
-    public void addFontContainer(COSBase cBase, FontContainer fc)
+    public void addFontContainer(COSBase cBase, FontContainer<?> fc)
     {
         this.fontContainers.put(cBase, fc);
     }
@@ -172,7 +174,7 @@ public class PreflightContext implements Closeable
      * @param cBase the COSBase for the font container
      * @return the font container.
      */
-    public FontContainer getFontContainer(COSBase cBase)
+    public FontContainer<?> getFontContainer(COSBase cBase)
     {
         return this.fontContainers.get(cBase);
     }
@@ -277,4 +279,13 @@ public class PreflightContext implements Closeable
         return currentPageNumber;
     }
 
+    public void setFileLen(long fileLen)
+    {
+        this.fileLen = fileLen;
+    }
+
+    public long getFileLen()
+    {
+        return fileLen;
+    }
 }

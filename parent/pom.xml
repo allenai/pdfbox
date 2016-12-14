@@ -43,9 +43,9 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <maven.javadoc.skip>true</maven.javadoc.skip>
+    <maven.javadoc.skip>true</maven.javadoc.skip>
     </properties>
-
+    
     <prerequisites>
     	<maven>3.0.0</maven>
   	</prerequisites>
@@ -67,22 +67,22 @@
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>2.4</version>
-            <scope>test</scope>
+                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcprov-jdk15on</artifactId>
-                <version>1.54</version>
+                <version>1.55</version>
             </dependency>
             <dependency>
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcmail-jdk15on</artifactId>
-                <version>1.54</version>
+                <version>1.55</version>
             </dependency>
             <dependency>
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcpkix-jdk15on</artifactId>
-                <version>1.54</version>
+                <version>1.55</version>
             </dependency>
             <dependency>
                 <groupId>log4j</groupId>
@@ -308,6 +308,13 @@
         <developer>
             <id>pkoch</id>
             <name>Phillipp Koch</name>
+            <roles>
+                <role>PMC Member</role>
+            </roles>
+        </developer>
+        <developer>
+            <id>tallison</id>
+            <name>Tim Allison</name>
             <roles>
                 <role>PMC Member</role>
             </roles>

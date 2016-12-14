@@ -48,6 +48,7 @@ import org.apache.pdfbox.util.Matrix;
 
 
 import static org.apache.pdfbox.pdmodel.font.UniUtil.getUniNameOfCodePoint;
+import org.apache.pdfbox.pdmodel.font.encoding.SymbolEncoding;
 
 /**
  * A PostScript Type 1 Font.
@@ -56,6 +57,8 @@ import static org.apache.pdfbox.pdmodel.font.UniUtil.getUniNameOfCodePoint;
  */
 public class PDType1Font extends PDSimpleFont implements PDVectorFont
 {
+    private static final Log LOG = LogFactory.getLog(PDType1Font.class);
+
     // todo: replace with enum? or getters?
     public static final PDType1Font TIMES_ROMAN = new PDType1Font("Times-Roman");
     public static final PDType1Font TIMES_BOLD = new PDType1Font("Times-Bold");
@@ -71,7 +74,7 @@ public class PDType1Font extends PDSimpleFont implements PDVectorFont
     public static final PDType1Font COURIER_BOLD_OBLIQUE = new PDType1Font("Courier-BoldOblique");
     public static final PDType1Font SYMBOL = new PDType1Font("Symbol");
     public static final PDType1Font ZAPF_DINGBATS = new PDType1Font("ZapfDingbats");
-    private static final Log LOG = LogFactory.getLog(PDType1Font.class);
+
     // alternative names for glyphs which are commonly encountered
     private static final Map<String, String> ALT_NAMES = new HashMap<String, String>();
     private static final int PFB_START_MARKER = 0x80;
@@ -123,6 +126,10 @@ public class PDType1Font extends PDSimpleFont implements PDVectorFont
         if ("ZapfDingbats".equals(baseFont))
         {
             encoding = ZapfDingbatsEncoding.INSTANCE;
+        }
+        else if ("Symbol".equals(baseFont))
+        {
+            encoding = SymbolEncoding.INSTANCE;
         }
         else
         {
@@ -233,9 +240,10 @@ public class PDType1Font extends PDSimpleFont implements PDVectorFont
                     int length1 = stream.getInt(COSName.LENGTH1);
                     int length2 = stream.getInt(COSName.LENGTH2);
 
-                    // repair Length1 if necessary
+                    // repair Length1 and Length2 if necessary
                     byte[] bytes = fontFile.toByteArray();
                     length1 = repairLength1(bytes, length1);
+                    length2 = repairLength2(bytes, length1, length2);
                     
                     if (bytes.length > 0 && (bytes[0] & 0xff) == PFB_START_MARKER)
                     {
@@ -336,6 +344,27 @@ public class PDType1Font extends PDSimpleFont implements PDVectorFont
         }
 
         return length1;
+    }
+
+    /**
+     * Some Type 1 fonts have an invalid Length2, see PDFBOX-3475. A negative /Length2 brings an
+     * IllegalArgumentException in Arrays.copyOfRange(), a huge value eats up memory because of
+     * padding.
+     *
+     * @param bytes Type 1 stream bytes
+     * @param length1 Length1 from the Type 1 stream
+     * @param length2 Length2 from the Type 1 stream
+     * @return repaired Length2 value
+     */
+    private int repairLength2(byte[] bytes, int length1, int length2)
+    {
+        // repair Length2 if necessary
+        if (length2 < 0 || length2 > bytes.length - length1)
+        {
+            LOG.warn("Ignored invalid Length2 " + length2 + " for Type 1 font " + getName());
+            return bytes.length - length1;
+        }
+        return length2;
     }
 
     /**
@@ -493,8 +522,10 @@ public class PDType1Font extends PDSimpleFont implements PDVectorFont
     {
         if (getFontDescriptor() != null) {
             PDRectangle bbox = getFontDescriptor().getFontBoundingBox();
-            if (bbox.getLowerLeftX() != 0 || bbox.getLowerLeftY() != 0 ||
-                bbox.getUpperRightX() != 0 || bbox.getUpperRightY() != 0) {
+            if (bbox != null &&
+                    (bbox.getLowerLeftX() != 0 || bbox.getLowerLeftY() != 0 ||
+                     bbox.getUpperRightX() != 0 || bbox.getUpperRightY() != 0))
+            {
                 return new BoundingBox(bbox.getLowerLeftX(), bbox.getLowerLeftY(),
                                        bbox.getUpperRightX(), bbox.getUpperRightY());
             }

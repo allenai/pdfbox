@@ -92,6 +92,7 @@ import org.apache.pdfbox.debugger.ui.DocumentEntry;
 import org.apache.pdfbox.debugger.ui.ErrorDialog;
 import org.apache.pdfbox.debugger.ui.ExtensionFileFilter;
 import org.apache.pdfbox.debugger.ui.FileOpenSaveDialog;
+import org.apache.pdfbox.debugger.ui.LogDialog;
 import org.apache.pdfbox.debugger.ui.MapEntry;
 import org.apache.pdfbox.debugger.ui.OSXAdapter;
 import org.apache.pdfbox.debugger.ui.PDFTreeCellRenderer;
@@ -147,6 +148,7 @@ public class PDFDebugger extends JFrame
     private JMenuItem saveMenuItem;
     private JMenu recentFilesMenu;
     private JMenuItem printMenuItem;
+    private JMenuItem reopenMenuItem;
     
     // edit > find menu
     private JMenu findMenu;
@@ -180,6 +182,10 @@ public class PDFDebugger extends JFrame
         isPageMode = viewPages;
         loadConfiguration();
         initComponents();
+
+        // use our custom logger
+        LogDialog.init(this, statusBar.getLogLabel());
+        System.setProperty("org.apache.commons.logging.Log", "org.apache.pdfbox.debugger.ui.DebugLog");
     }
 
     /**
@@ -191,7 +197,10 @@ public class PDFDebugger extends JFrame
     public static void main(String[] args) throws Exception
     {
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        System.setProperty("apple.laf.useScreenMenuBar", "true");
+        if (System.getProperty("apple.laf.useScreenMenuBar") == null)
+        {
+            System.setProperty("apple.laf.useScreenMenuBar", "true");
+        }
 
         // handle uncaught exceptions
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler()
@@ -236,7 +245,7 @@ public class PDFDebugger extends JFrame
             File file = new File(filename);
             if (file.exists())
             {
-                viewer.readPDFFile( filename, password );
+                viewer.readPDFFile(filename, password);
             }
         }
         viewer.setVisible(true);
@@ -297,7 +306,7 @@ public class PDFDebugger extends JFrame
         tree.setCellRenderer(new PDFTreeCellRenderer());
         tree.setModel(null);
 
-        setTitle("PDFBox Debugger");
+        setTitle("Apache PDFBox Debugger");
 
         addWindowListener(new java.awt.event.WindowAdapter()
         {
@@ -429,6 +438,7 @@ public class PDFDebugger extends JFrame
 
         JMenu fileMenu = new JMenu("File");
         fileMenu.add(openMenuItem);
+        fileMenu.setMnemonic('F');
 
         JMenuItem openUrlMenuItem = new JMenuItem("Open URL...");
         openUrlMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_U, SHORCUT_KEY_MASK));
@@ -453,6 +463,33 @@ public class PDFDebugger extends JFrame
             }
         });
         fileMenu.add(openUrlMenuItem);
+        
+        reopenMenuItem = new JMenuItem("Reopen");
+        reopenMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, SHORCUT_KEY_MASK));
+        reopenMenuItem.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent evt)
+            {
+                try
+                {
+                    if (currentFilePath.startsWith("http"))
+                    {
+                        readPDFurl(currentFilePath, "");
+                    }
+                    else
+                    {
+                        readPDFFile(currentFilePath, "");
+                    }
+                }
+                catch (IOException e)
+                {
+                    new ErrorDialog(e).setVisible(true);
+                }
+            }
+        });
+        reopenMenuItem.setEnabled(false);
+        fileMenu.add(reopenMenuItem);
 
         try
         {
@@ -508,6 +545,7 @@ public class PDFDebugger extends JFrame
     private JMenu createEditMenu()
     {
         JMenu editMenu = new JMenu("Edit");
+        editMenu.setMnemonic('E');
         
         JMenuItem cutMenuItem = new JMenuItem("Cut");
         cutMenuItem.setEnabled(false);
@@ -533,6 +571,7 @@ public class PDFDebugger extends JFrame
     private JMenu createViewMenu()
     {
         JMenu viewMenu = new JMenu("View");
+        viewMenu.setMnemonic('V');
         if (isPageMode)
         {
             viewModeItem = new JMenuItem("Show Internal Structure");
@@ -1236,6 +1275,8 @@ public class PDFDebugger extends JFrame
         }
         currentFilePath = file.getPath();
         recentFiles.removeFile(file.getPath());
+        LogDialog.instance().clear();
+        
         parseDocument( file, password );
         
         initTree();
@@ -1266,6 +1307,7 @@ public class PDFDebugger extends JFrame
         URL url = new URL(urlString);
         document = PDDocument.load(url.openStream(), password);
         printMenuItem.setEnabled(true);
+        reopenMenuItem.setEnabled(true);
 
         initTree();
 
@@ -1338,6 +1380,7 @@ public class PDFDebugger extends JFrame
             break;
         }        
         printMenuItem.setEnabled(true);
+        reopenMenuItem.setEnabled(true);
     }
 
     private void addRecentFileItems()

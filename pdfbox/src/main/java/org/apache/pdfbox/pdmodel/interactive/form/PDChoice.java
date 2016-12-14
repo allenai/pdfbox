@@ -228,7 +228,7 @@ public abstract class PDChoice extends PDVariableText
         {
             return COSArrayList.convertIntegerCOSArrayToList((COSArray) value);
         }
-        return Collections.<Integer>emptyList();
+        return Collections.emptyList();
     }
 
     /**
@@ -239,7 +239,6 @@ public abstract class PDChoice extends PDVariableText
      *  <li>do support multiple selections</li>
      *  <li>have export values with the same value</li>
      * </ul>
-     * </p>
      * <p>
      * Setting the index will set the value too.
      *

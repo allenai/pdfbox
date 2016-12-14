@@ -505,7 +505,7 @@ public abstract class BaseParser
                     case '6':
                     case '7':
                     {
-                        StringBuffer octal = new StringBuffer();
+                        StringBuilder octal = new StringBuilder();
                         octal.append( next );
                         c = seqSource.read();
                         char digit = (char)c;
@@ -789,7 +789,7 @@ public abstract class BaseParser
         else
         {
             // some malformed PDFs don't use UTF-8 see PDFBOX-3347
-            string = new String(buffer.toByteArray(), Charsets.ISO_8859_1);
+            string = new String(buffer.toByteArray(), Charsets.WINDOWS_1252);
         }
         return COSName.getPDFName(string);
     }

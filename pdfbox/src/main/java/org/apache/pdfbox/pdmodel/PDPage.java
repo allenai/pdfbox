@@ -160,7 +160,7 @@ public class PDPage implements COSObjectable, PDContentStream
             }
             return new SequenceInputStream(Collections.enumeration(inputStreams));
         }
-        return null;
+        return new ByteArrayInputStream(new byte[0]);
     }
 
     /**
@@ -514,10 +514,11 @@ public class PDPage implements COSObjectable, PDContentStream
     }
 
     /**
-     * This will get a list of PDThreadBead objects, which are article threads in the document.
-     * This will return an empty list if there are no thread beads.
-     * 
-     * @return A list of article threads on this page.
+     * This will get a list of PDThreadBead objects, which are article threads in the document. This
+     * will return an empty list if there are no thread beads.
+     *
+     * @return A list of article threads on this page, never null. The returned list is backed by
+     * the beads COSArray, so any adding or deleting in this list will change the document too.
      */
     public List<PDThreadBead> getThreadBeads()
     {
@@ -539,7 +540,6 @@ public class PDPage implements COSObjectable, PDContentStream
             pdObjects.add(bead);
         }
         return new COSArrayList<PDThreadBead>(pdObjects, beads);
-
     }
 
     /**
@@ -636,9 +636,11 @@ public class PDPage implements COSObjectable, PDContentStream
     }
 
     /**
-     * This will return a list of the Annotations for this page.
+     * This will return a list of the annotations for this page.
+     *
+     * @return List of the PDAnnotation objects, never null. The returned list is backed by the
+     * annotations COSArray, so any adding or deleting in this list will change the document too.
      * 
-     * @return List of the PDAnnotation objects, never null.
      * @throws IOException If there is an error while creating the annotation list.
      */
     public List<PDAnnotation> getAnnotations() throws IOException
@@ -647,9 +649,7 @@ public class PDPage implements COSObjectable, PDContentStream
         COSArray annots = (COSArray) page.getDictionaryObject(COSName.ANNOTS);
         if (annots == null)
         {
-            annots = new COSArray();
-            page.setItem(COSName.ANNOTS, annots);
-            retval = new COSArrayList<PDAnnotation>(new ArrayList<PDAnnotation>(), annots);
+            return new COSArrayList<PDAnnotation>(page, COSName.ANNOTS);
         }
         else
         {
